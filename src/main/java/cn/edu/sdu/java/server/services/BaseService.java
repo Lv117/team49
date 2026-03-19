@@ -160,7 +160,12 @@ public class BaseService {
                 return CommonMethod.getReturnData(dataList);
             userTypeId = userRepository.findById(personId).get().getUserType().getId();
         }
+
+        // 添加调试日志
+        System.out.println("=== 查询菜单 === userTypeId: " + userTypeId);
         List<MenuInfo> mList = menuInfoRepository.findByUserTypeIds(userTypeId + "");
+        System.out.println("=== 查询结果 === 数量：" + (mList == null ? 0 : mList.size()));
+
         Map<String, Object> m;
         List<Map<String, Object>> sList;
         String name, path;
@@ -169,7 +174,7 @@ public class BaseService {
             name = info.getName();
             if(name!= null&& !name.isEmpty()) {
                 path = name.substring(0,1).toLowerCase()+ name.substring(1);
-            }else {
+            } else {
                 path = "";
             }
             m.put("id", info.getId());
@@ -180,8 +185,11 @@ public class BaseService {
             m.put("sList", sList);
             dataList.add(m);
         }
+
+        System.out.println("=== 返回数据 === 数量：" + dataList.size());
         return CommonMethod.getReturnData(dataList);
     }
+
 
 
     public OptionItemList getRoleOptionItemList(@Valid @RequestBody DataRequest dataRequest) {

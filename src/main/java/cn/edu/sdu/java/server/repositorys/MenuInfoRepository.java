@@ -3,20 +3,23 @@ package cn.edu.sdu.java.server.repositorys;
 import cn.edu.sdu.java.server.models.MenuInfo;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
-/*
- * MenuInfo 数据操作接口，主要实现MenuInfo数据的查询操作
- * Integer getMaxId()  menu 表中的最大的menu_id;    JPQL 注解
- * Optional<Person> findByNum(String num);  根据num查询获得Option<Person>对象,  命名规范
- * List<MenuInfo> findByUserTypeId(Integer userTypeId); 根据userTypeId查询获得pid为空的 菜单List<MenuInfo>集合 查询相应角色的所有跟菜单 JPQL 注解
- * List<MenuInfo> findByUserTypeIdAndPid(Integer userTypeId, Integer pid);根据userTypeId和pid查询获得pid的所有子菜单List<MenuInfo>集合 命名规范
- */
-public interface MenuInfoRepository extends JpaRepository<MenuInfo,Integer> {
-    @Query(value=" from MenuInfo where (pid is null or pid=0) and (?1='' or userTypeIds like %?1%)")
-    List<MenuInfo> findByUserTypeIds(String userTypeIds);
-    @Query(value=" from MenuInfo where pid =?2 and (?1='' or userTypeIds like %?1%)")
-    List<MenuInfo> findByUserTypeIds(String userTypeIds, Integer pid);
 
-    int countMenuInfoByPid(Integer count);
+@Repository
+public interface MenuInfoRepository extends JpaRepository<MenuInfo, Integer> {
+
+    // 查询所有顶级菜单（pid 为 null）
+    @Query("SELECT m FROM MenuInfo m WHERE m.userTypeIds LIKE %:userTypeIds% AND m.pid IS NULL ORDER BY m.id")
+    List<MenuInfo> findByUserTypeIds(@Param("userTypeIds") String userTypeIds);
+
+    // 查询某个父菜单下的子菜单
+    @Query("SELECT m FROM MenuInfo m WHERE m.userTypeIds LIKE %:userTypeIds% AND m.pid = :pid ORDER BY m.id")
+    List<MenuInfo> findByUserTypeIds(@Param("userTypeIds") String userTypeIds, @Param("pid") Integer pid);
+
+    // 统计某个父菜单下的子菜单数量
+    @Query("SELECT COUNT(m) FROM MenuInfo m WHERE m.pid = :pid")
+    int countMenuInfoByPid(@Param("pid") Integer pid);
 }
