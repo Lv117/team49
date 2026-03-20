@@ -4,6 +4,7 @@ import cn.edu.sdu.java.server.models.InnovationProject;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.InnovationProjectRepository;
+import cn.edu.sdu.java.server.util.ApprovalStateMachine;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -175,6 +176,14 @@ public class InnovationProjectService {
             Optional<InnovationProject> op = innovationProjectRepository.findById(projectId);
             if (op.isPresent()) {
                 InnovationProject project = op.get();
+                String currentStatus = project.getStatus();
+                
+                // 使用状态机工具类检查状态转换是否有效
+                if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
+                    return CommonMethod.getReturnMessageError(
+                        ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
+                }
+                
                 project.setStatus(status);
                 project.setApprovalOpinion(approvalOpinion);
                 project.setUpdateTime(LocalDateTime.now());
