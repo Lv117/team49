@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -56,9 +57,23 @@ public class AuthService {
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
-        Optional<User> op= userRepository.findByUserName(loginRequest.getUsername());
+        
+        Optional<User> op = userRepository.findByUserName(loginRequest.getUsername());
         if(op.isPresent()) {
-            User user= op.get();
+            User user = op.get();
+            
+            UserType userType = user.getUserType();
+            if (userType == null || userType.getName() == null) {
+                return CommonMethod.getReturnMessageError("登录失败：用户角色信息缺失！");
+            }
+            
+            boolean isValidRole = Arrays.stream(EUserType.values())
+                    .anyMatch(validRole -> validRole.name().equals(userType.getName()));
+            
+            if (!isValidRole) {
+                return CommonMethod.getReturnMessageError("登录失败：用户角色无效，不允许登录！");
+            }
+            
             user.setLastLoginTime(DateTimeTool.parseDateTime(new Date()));
             Integer count = user.getLoginCount();
             if (count == null)
@@ -67,6 +82,7 @@ public class AuthService {
             user.setLoginCount(count);
             userRepository.save(user);
         }
+        
         String jwt = jwtService.generateToken(userDetails);
         JwtResponse jwtResponse = new JwtResponse(jwt,
                 userDetails.getId(),
