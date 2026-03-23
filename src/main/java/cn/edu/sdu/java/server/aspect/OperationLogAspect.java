@@ -77,7 +77,12 @@ public class OperationLogAspect {
             // 构建日志信息
             ModifyLog modifyLog = new ModifyLog();
             modifyLog.setType(exception == null ? "INFO" : "ERROR");
-            modifyLog.setTableName(className);
+            // 使用简短标识，避免超过 20 字符限制
+            String tableName = className;
+            if (tableName.length() > 20) {
+                tableName = className.substring(0, 20);
+            }
+            modifyLog.setTableName(tableName);
             
             String logInfo = String.format("方法：%s.%s | 操作人：%s | 结果：%s",
                 className, methodName, operatorName, exception == null ? "成功" : "失败");

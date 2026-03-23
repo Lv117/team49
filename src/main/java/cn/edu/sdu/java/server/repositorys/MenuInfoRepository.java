@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface MenuInfoRepository extends JpaRepository<MenuInfo, Integer> {
@@ -22,4 +23,12 @@ public interface MenuInfoRepository extends JpaRepository<MenuInfo, Integer> {
     // 统计某个父菜单下的子菜单数量
     @Query("SELECT COUNT(m) FROM MenuInfo m WHERE m.pid = :pid")
     int countMenuInfoByPid(@Param("pid") Integer pid);
+
+    Optional<MenuInfo> findByName(String name);
+
+    @Query("SELECT COALESCE(MAX(m.id), 0) FROM MenuInfo m")
+    Integer findMaxId();
+
+    @Query("SELECT m FROM MenuInfo m WHERE m.pid IS NULL AND m.title = :title ORDER BY m.id")
+    List<MenuInfo> findRootByTitle(@Param("title") String title);
 }

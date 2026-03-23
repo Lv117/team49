@@ -234,13 +234,13 @@ public class StudentService {
         Course c;
         for (Score s : sList) {
             c = s.getCourse();
-            if (s.getMark() >= 90)
+            if (s.getMark() != null && s.getMark().compareTo(new java.math.BigDecimal("90")) >= 0)
                 count[0]++;
-            else if (s.getMark() >= 80)
+            else if (s.getMark() != null && s.getMark().compareTo(new java.math.BigDecimal("80")) >= 0)
                 count[1]++;
-            else if (s.getMark() >= 70)
+            else if (s.getMark() != null && s.getMark().compareTo(new java.math.BigDecimal("70")) >= 0)
                 count[2]++;
-            else if (s.getMark() >= 60)
+            else if (s.getMark() != null && s.getMark().compareTo(new java.math.BigDecimal("60")) >= 0)
                 count[3]++;
             else
                 count[4]++;

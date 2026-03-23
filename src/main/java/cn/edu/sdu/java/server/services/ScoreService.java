@@ -11,11 +11,16 @@ import cn.edu.sdu.java.server.repositorys.CourseRepository;
 import cn.edu.sdu.java.server.repositorys.ScoreRepository;
 import cn.edu.sdu.java.server.repositorys.StudentRepository;
 import cn.edu.sdu.java.server.util.CommonMethod;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
 import java.util.*;
 
 @Service
 public class ScoreService {
+    private static final Logger log = LoggerFactory.getLogger(ScoreService.class);
+
     private final CourseRepository courseRepository;
     private final ScoreRepository scoreRepository;
     private final StudentRepository studentRepository;
@@ -72,7 +77,7 @@ public class ScoreService {
     public DataResponse scoreSave(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         Integer courseId = dataRequest.getInteger("courseId");
-        Integer mark = dataRequest.getInteger("mark");
+        String rawMark = dataRequest.getString("mark");
         Integer scoreId = dataRequest.getInteger("scoreId");
         Optional<Score> op;
         Score s = null;
@@ -80,6 +85,14 @@ public class ScoreService {
             op= scoreRepository.findById(scoreId);
             if(op.isPresent())
                 s = op.get();
+        }
+        BigDecimal originalMark = s == null ? null : s.getMark();
+        BigDecimal mark = ScoreMarkValidator.parseOrNull(rawMark);
+        if (mark == null) {
+            Integer userId = CommonMethod.getPersonId();
+            log.warn("scoreSave invalid mark userId={} scoreId={} originalMark={} illegalValue={} time={}",
+                    userId, scoreId, originalMark, rawMark, new Date());
+            return new DataResponse(400, null, ScoreMarkValidator.INVALID_MSG);
         }
         if(s == null) {
             s = new Score();
@@ -103,5 +116,4 @@ public class ScoreService {
         }
         return CommonMethod.getReturnMessageOK();
     }
-
 }

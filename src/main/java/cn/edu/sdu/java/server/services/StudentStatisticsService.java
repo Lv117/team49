@@ -12,6 +12,7 @@ import cn.edu.sdu.java.server.repositorys.StudentStatisticsRepository;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,9 +57,9 @@ public class StudentStatisticsService {
         Object[] as;
         Long l;
         int c;
-        double creditMark;
         double creditSum;
-        double sum;
+        BigDecimal sum;
+        BigDecimal creditMark;
         List<Integer> idList = new ArrayList<>();
         Map<Integer,StudentStatistics> sMap = new HashMap<>();
         StudentStatistics ss;
@@ -98,12 +99,14 @@ public class StudentStatisticsService {
                     c = 0;
                 if(c == 0)
                     continue;
-                sum = (Long)as[2];
+                sum = toBigDecimal(as[2]);
                 ss.setCourseCount(c);
-                ss.setAvgScore(CommonMethod.getDouble2(sum/c));
-                creditSum = (Long)as[3];
-                creditMark = (Long)as[4];
-                ss.setGpa(CommonMethod.getDouble2(creditMark / creditSum));
+                ss.setAvgScore(CommonMethod.getDouble2(sum.doubleValue() / c));
+                creditSum = toBigDecimal(as[3]).doubleValue();
+                creditMark = toBigDecimal(as[4]);
+                if (creditSum > 0) {
+                    ss.setGpa(CommonMethod.getDouble2(creditMark.doubleValue() / creditSum));
+                }
             }
         }
         list = studentLeaveRepository.getStudentStatisticsList(idList);
@@ -133,5 +136,22 @@ public class StudentStatisticsService {
             studentStatisticsRepository.save(ss);
         }
         return CommonMethod.getReturnMessageOK();
+    }
+
+    private BigDecimal toBigDecimal(Object obj) {
+        if (obj == null) {
+            return BigDecimal.ZERO;
+        }
+        if (obj instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (obj instanceof Number n) {
+            return new BigDecimal(n.toString());
+        }
+        try {
+            return new BigDecimal(obj.toString());
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 }

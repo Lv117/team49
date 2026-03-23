@@ -106,7 +106,13 @@ public class InnovationProjectService {
      */
     public DataResponse innovationProjectSave(DataRequest dataRequest) {
         Map<String, Object> form = dataRequest.getMap("form");
+        if (form == null || form.isEmpty()) {
+            form = dataRequest.getData() != null ? dataRequest.getData() : new HashMap<>();
+        }
         Integer projectId = CommonMethod.getInteger(form, "projectId");
+        if (projectId == null) {
+            projectId = CommonMethod.getInteger(form, "id");
+        }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         
         InnovationProject project = null;
@@ -155,6 +161,9 @@ public class InnovationProjectService {
      */
     public DataResponse innovationProjectDelete(DataRequest dataRequest) {
         Integer projectId = dataRequest.getInteger("projectId");
+        if (projectId == null) {
+            projectId = dataRequest.getInteger("id");
+        }
         
         if (projectId != null && projectId > 0) {
             Optional<InnovationProject> op = innovationProjectRepository.findById(projectId);
@@ -169,6 +178,9 @@ public class InnovationProjectService {
      */
     public DataResponse innovationProjectApprove(DataRequest dataRequest) {
         Integer projectId = dataRequest.getInteger("projectId");
+        if (projectId == null) {
+            projectId = dataRequest.getInteger("id");
+        }
         String status = dataRequest.getString("status");
         String approvalOpinion = dataRequest.getString("approvalOpinion");
         

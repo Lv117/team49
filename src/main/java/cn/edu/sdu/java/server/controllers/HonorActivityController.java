@@ -55,6 +55,15 @@ public class HonorActivityController {
         return honorActivityService.honorDelete(dataRequest);
     }
 
+    /**
+     * 审批荣誉奖励
+     */
+    @PostMapping("/honorApprove")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public DataResponse honorApprove(@Valid @RequestBody DataRequest dataRequest) {
+        return honorActivityService.honorApprove(dataRequest);
+    }
+
     // ==================== 日常活动管理 ====================
 
     /**

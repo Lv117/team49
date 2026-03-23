@@ -6,6 +6,7 @@ import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.DailyActivityRepository;
 import cn.edu.sdu.java.server.repositorys.HonorRepository;
+import cn.edu.sdu.java.server.util.ApprovalStateMachine;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -110,7 +111,13 @@ public class HonorActivityService {
      */
     public DataResponse honorSave(DataRequest dataRequest) {
         Map<String, Object> form = dataRequest.getMap("form");
+        if (form == null || form.isEmpty()) {
+            form = dataRequest.getData() != null ? dataRequest.getData() : new HashMap<>();
+        }
         Integer honorId = CommonMethod.getInteger(form, "honorId");
+        if (honorId == null) {
+            honorId = CommonMethod.getInteger(form, "id");
+        }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         
         Honor honor = null;
@@ -154,12 +161,50 @@ public class HonorActivityService {
      */
     public DataResponse honorDelete(DataRequest dataRequest) {
         Integer honorId = dataRequest.getInteger("honorId");
+        if (honorId == null) {
+            honorId = dataRequest.getInteger("id");
+        }
         
         if (honorId != null && honorId > 0) {
             Optional<Honor> op = honorRepository.findById(honorId);
             op.ifPresent(honorRepository::delete);
         }
         
+        return CommonMethod.getReturnMessageOK();
+    }
+
+    /**
+     * 审批荣誉奖励
+     */
+    public DataResponse honorApprove(DataRequest dataRequest) {
+        Integer honorId = dataRequest.getInteger("honorId");
+        if (honorId == null) {
+            honorId = dataRequest.getInteger("id");
+        }
+        String status = dataRequest.getString("status");
+
+        if (honorId == null || honorId <= 0) {
+            return CommonMethod.getReturnMessageError("荣誉ID不能为空");
+        }
+        if (status == null || status.isEmpty()) {
+            return CommonMethod.getReturnMessageError("目标状态不能为空");
+        }
+
+        Optional<Honor> op = honorRepository.findById(honorId);
+        if (op.isEmpty()) {
+            return CommonMethod.getReturnMessageError("荣誉记录不存在");
+        }
+
+        Honor honor = op.get();
+        String currentStatus = honor.getStatus();
+        if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
+            return CommonMethod.getReturnMessageError(
+                    ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
+        }
+
+        honor.setStatus(status);
+        honor.setUpdateTime(LocalDateTime.now());
+        honorRepository.save(honor);
         return CommonMethod.getReturnMessageOK();
     }
 
