@@ -101,4 +101,13 @@ public class HonorActivityController {
     public DataResponse dailyActivityDelete(@Valid @RequestBody DataRequest dataRequest) {
         return honorActivityService.dailyActivityDelete(dataRequest);
     }
+
+    /**
+     * 审批日常活动
+     */
+    @PostMapping("/dailyActivityApprove")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public DataResponse dailyActivityApprove(@Valid @RequestBody DataRequest dataRequest) {
+        return honorActivityService.dailyActivityApprove(dataRequest);
+    }
 }

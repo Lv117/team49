@@ -33,19 +33,19 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable);
-        http.cors(cors -> cors.configurationSource(request -> {
-            CorsConfiguration configuration = new CorsConfiguration();
-            configuration.setAllowedOrigins(List.of("*"));
-            configuration.setAllowedMethods(List.of("*"));
-            configuration.setAllowedHeaders(List.of("*"));
-            return configuration;
-        }));
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         http
                 .authorizeHttpRequests(
                         authz -> {
                             try {
                                 authz
                                         .requestMatchers("/api/test/**")
+                                        .permitAll()
+                                        .requestMatchers("/api/auth/**")  // 允许登录接口
+                                        .permitAll()
+                                        .requestMatchers("/auth/**")  // 兼容旧版登录路径
+                                        .permitAll()
+                                        .requestMatchers("/public/**", "/index.html")  // 静态资源
                                         .permitAll()
                                         .requestMatchers("/api/**")
                                         .authenticated()

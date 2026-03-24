@@ -182,27 +182,29 @@ public class HonorActivityService {
             honorId = dataRequest.getInteger("id");
         }
         String status = dataRequest.getString("status");
-
+        String approvalOpinion = dataRequest.getString("approvalOpinion");
+    
         if (honorId == null || honorId <= 0) {
-            return CommonMethod.getReturnMessageError("荣誉ID不能为空");
+            return CommonMethod.getReturnMessageError("荣誉 ID 不能为空");
         }
         if (status == null || status.isEmpty()) {
             return CommonMethod.getReturnMessageError("目标状态不能为空");
         }
-
+    
         Optional<Honor> op = honorRepository.findById(honorId);
         if (op.isEmpty()) {
             return CommonMethod.getReturnMessageError("荣誉记录不存在");
         }
-
+    
         Honor honor = op.get();
         String currentStatus = honor.getStatus();
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
             return CommonMethod.getReturnMessageError(
                     ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
         }
-
+    
         honor.setStatus(status);
+        honor.setApprovalOpinion(approvalOpinion);
         honor.setUpdateTime(LocalDateTime.now());
         honorRepository.save(honor);
         return CommonMethod.getReturnMessageOK();
@@ -343,6 +345,43 @@ public class HonorActivityService {
             op.ifPresent(dailyActivityRepository::delete);
         }
         
+        return CommonMethod.getReturnMessageOK();
+    }
+
+    /**
+     * 审批日常活动
+     */
+    public DataResponse dailyActivityApprove(DataRequest dataRequest) {
+        Integer activityId = dataRequest.getInteger("activityId");
+        if (activityId == null) {
+            activityId = dataRequest.getInteger("id");
+        }
+        String status = dataRequest.getString("status");
+        String approvalOpinion = dataRequest.getString("approvalOpinion");
+
+        if (activityId == null || activityId <= 0) {
+            return CommonMethod.getReturnMessageError("活动 ID 不能为空");
+        }
+        if (status == null || status.isEmpty()) {
+            return CommonMethod.getReturnMessageError("目标状态不能为空");
+        }
+
+        Optional<DailyActivity> op = dailyActivityRepository.findById(activityId);
+        if (op.isEmpty()) {
+            return CommonMethod.getReturnMessageError("活动记录不存在");
+        }
+
+        DailyActivity activity = op.get();
+        String currentStatus = activity.getStatus();
+        if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
+            return CommonMethod.getReturnMessageError(
+                    ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
+        }
+
+        activity.setStatus(status);
+        activity.setApprovalOpinion(approvalOpinion);
+        activity.setUpdateTime(LocalDateTime.now());
+        dailyActivityRepository.save(activity);
         return CommonMethod.getReturnMessageOK();
     }
 

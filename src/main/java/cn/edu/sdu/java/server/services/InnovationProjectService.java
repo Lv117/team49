@@ -105,10 +105,12 @@ public class InnovationProjectService {
      * 保存创新实践项目
      */
     public DataResponse innovationProjectSave(DataRequest dataRequest) {
-        Map<String, Object> form = dataRequest.getMap("form");
-        if (form == null || form.isEmpty()) {
-            form = dataRequest.getData() != null ? dataRequest.getData() : new HashMap<>();
+        // 直接从 dataRequest.data 中获取参数
+        Map<String, Object> form = dataRequest.getData();
+        if (form == null) {
+            form = new HashMap<>();
         }
+        
         Integer projectId = CommonMethod.getInteger(form, "projectId");
         if (projectId == null) {
             projectId = CommonMethod.getInteger(form, "id");

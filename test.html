@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>接口测试工具</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>接口测试工具</h1>
+    <button onclick="testLogin()">1. 登录获取 Token</button>
+    <button onclick="testGetList()">2. 查询创新项目列表</button>
+    <button onclick="testSave()">3. 保存项目</button>
+    <button onclick="testApprove()">4. 审批项目</button>
+    
+    <h2>测试结果：</h2>
+    <pre id="result"></pre>
+
+    <script>
+        let token = '';
+
+        function showResult(data) {
+            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+        }
+
+        function testLogin() {
+            fetch('http://localhost:22223/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: 'admin',
+                    password: '123456'  // 管理员账号，密码 123456
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('登录返回:', data);
+                if (data.code === 0 && data.data && data.data.token) {  // code: 0 表示成功
+                    token = data.data.token;
+                    console.log('Token 获取成功:', token);
+                    showResult({success: true, message: '登录成功！Token 已保存', token: token});
+                } else {
+                    showResult(data);
+                }
+            })
+            .catch(err => {
+                console.error('登录请求失败:', err);
+                showResult({error: err.message});
+            });
+        }
+
+        function testGetList() {
+            if (!token) {
+                showResult({error: '请先登录获取 Token'});
+                return;
+            }
+            fetch('http://localhost:22223/api/innovation/getInnovationProjectList', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({})
+            })
+            .then(r => r.json())
+            .then(showResult)
+            .catch(err => showResult({error: err.message}));
+        }
+
+        function testSave() {
+            if (!token) {
+                showResult({error: '请先登录获取 Token'});
+                return;
+            }
+            
+            // 注意：DataRequest 类的字段是 data，所以应该发送 { data: {...} }
+            // 而不是 { form: {...} }
+            const testData = {
+                data: {
+                    projectName: '测试项目',
+                    studentId: 1,
+                    studentName: '张三',
+                    projectType: '国家级',
+                    description: '测试',
+                    startDate: '2024-03-01',
+                    endDate: '2024-06-30',
+                    status: 'draft'
+                }
+            };
+            
+            console.log('发送的 JSON:', JSON.stringify(testData));
+            
+            fetch('http://localhost:22223/api/innovation/innovationProjectSave', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(testData)
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('保存返回:', data);
+                showResult(data);
+            })
+            .catch(err => {
+                console.error('保存请求失败:', err);
+                showResult({error: err.message});
+            });
+        }
+
+        function testApprove() {
+            if (!token) {
+                showResult({error: '请先登录获取 Token'});
+                return;
+            }
+            fetch('http://localhost:22223/api/innovation/innovationProjectApprove', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({
+                    projectId: 1,
+                    status: 'submitted',
+                    approvalOpinion: '同意立项'
+                })
+            })
+            .then(r => r.json())
+            .then(showResult)
+            .catch(err => showResult({error: err.message}));
+        }
+    </script>
+</body>
+</html>

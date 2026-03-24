@@ -39,6 +39,9 @@ public class DailyActivity {
     @Column(name = "status", length = 20)
     private String status = "draft";
 
+    @Column(name = "approval_opinion", length = 500)
+    private String approvalOpinion;
+
     @Column(name = "create_time")
     private LocalDateTime createTime;
 
