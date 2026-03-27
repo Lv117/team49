@@ -17,10 +17,9 @@ public class ApprovalStateMachine {
      */
     private static final Map<String, List<String>> VALID_TRANSITIONS = Map.of(
         "draft", Arrays.asList("submitted"),
-        "submitted", Arrays.asList("under_review"),
-        "under_review", Arrays.asList("approved", "rejected"),
+        "submitted", Arrays.asList("approved", "rejected"),
         "approved", Arrays.asList(),
-        "rejected", Arrays.asList("draft")
+        "rejected", Arrays.asList("draft", "submitted")
     );
 
     /**

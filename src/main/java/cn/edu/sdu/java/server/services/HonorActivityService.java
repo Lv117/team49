@@ -401,6 +401,7 @@ public class HonorActivityService {
         map.put("description", honor.getDescription());
         map.put("certificateUrl", honor.getCertificateUrl());
         map.put("status", honor.getStatus());
+        map.put("approvalOpinion", honor.getApprovalOpinion());
         map.put("createTime", honor.getCreateTime());
         map.put("updateTime", honor.getUpdateTime());
         return map;
