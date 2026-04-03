@@ -12,6 +12,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import cn.edu.sdu.java.server.models.ApprovalRecord;
+import cn.edu.sdu.java.server.repositorys.ApprovalRecordRepository;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -20,11 +22,17 @@ import java.util.*;
 public class HonorActivityService {
     private final HonorRepository honorRepository;
     private final DailyActivityRepository dailyActivityRepository;
+    private final ApprovalRecordRepository approvalRecordRepository;  // 添加这行
 
-    public HonorActivityService(HonorRepository honorRepository, DailyActivityRepository dailyActivityRepository) {
+    // 修改构造函数
+    public HonorActivityService(HonorRepository honorRepository,
+                                DailyActivityRepository dailyActivityRepository,
+                                ApprovalRecordRepository approvalRecordRepository) {  // 添加这个参数
         this.honorRepository = honorRepository;
         this.dailyActivityRepository = dailyActivityRepository;
+        this.approvalRecordRepository = approvalRecordRepository;  // 添加这行赋值
     }
+
 
     // ==================== 荣誉奖励管理 ====================
 
@@ -147,6 +155,7 @@ public class HonorActivityService {
         
         honor.setDescription(CommonMethod.getString(form, "description"));
         honor.setCertificateUrl(CommonMethod.getString(form, "certificateUrl"));
+        honor.setApprovalOpinion(CommonMethod.getString(form, "approvalOpinion"));
         
         String statusStr = CommonMethod.getString(form, "status");
         honor.setStatus(statusStr != null && !statusStr.isEmpty() ? statusStr : "draft");
@@ -207,6 +216,18 @@ public class HonorActivityService {
         honor.setApprovalOpinion(approvalOpinion);
         honor.setUpdateTime(LocalDateTime.now());
         honorRepository.save(honor);
+        // 保存审批记录
+        ApprovalRecord record = new ApprovalRecord();
+        record.setBusinessType("honor");
+        record.setBusinessId(honor.getId());
+        record.setFromStatus(currentStatus);
+        record.setToStatus(status);
+        record.setApprovalOpinion(approvalOpinion);
+        record.setOperatorId(CommonMethod.getPersonId());
+        record.setOperatorName(CommonMethod.getUsername());
+        record.setOperateTime(LocalDateTime.now());
+        approvalRecordRepository.save(record);
+
         return CommonMethod.getReturnMessageOK();
     }
 
@@ -382,6 +403,18 @@ public class HonorActivityService {
         activity.setApprovalOpinion(approvalOpinion);
         activity.setUpdateTime(LocalDateTime.now());
         dailyActivityRepository.save(activity);
+        // 保存审批记录
+        ApprovalRecord record = new ApprovalRecord();
+        record.setBusinessType("activity");
+        record.setBusinessId(activity.getId());
+        record.setFromStatus(currentStatus);
+        record.setToStatus(status);
+        record.setApprovalOpinion(approvalOpinion);
+        record.setOperatorId(CommonMethod.getPersonId());
+        record.setOperatorName(CommonMethod.getUsername());
+        record.setOperateTime(LocalDateTime.now());
+        approvalRecordRepository.save(record);
+
         return CommonMethod.getReturnMessageOK();
     }
 

@@ -10,6 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import cn.edu.sdu.java.server.models.ApprovalRecord;
+import cn.edu.sdu.java.server.repositorys.ApprovalRecordRepository;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -17,9 +19,12 @@ import java.util.*;
 @Service
 public class InnovationProjectService {
     private final InnovationProjectRepository innovationProjectRepository;
+    private final ApprovalRecordRepository approvalRecordRepository;
 
-    public InnovationProjectService(InnovationProjectRepository innovationProjectRepository) {
+    public InnovationProjectService(InnovationProjectRepository innovationProjectRepository,
+                                    ApprovalRecordRepository approvalRecordRepository) {
         this.innovationProjectRepository = innovationProjectRepository;
+        this.approvalRecordRepository = approvalRecordRepository;
     }
 
     /**
@@ -202,6 +207,18 @@ public class InnovationProjectService {
                 project.setApprovalOpinion(approvalOpinion);
                 project.setUpdateTime(LocalDateTime.now());
                 innovationProjectRepository.save(project);
+                // 保存审批记录
+                ApprovalRecord record = new ApprovalRecord();
+                record.setBusinessType("innovation");
+                record.setBusinessId(project.getId());
+                record.setFromStatus(currentStatus);
+                record.setToStatus(status);
+                record.setApprovalOpinion(approvalOpinion);
+                record.setOperatorId(CommonMethod.getPersonId());
+                record.setOperatorName(CommonMethod.getUsername());
+                record.setOperateTime(LocalDateTime.now());
+                approvalRecordRepository.save(record);
+
             }
         }
         
