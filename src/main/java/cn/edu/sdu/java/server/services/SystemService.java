@@ -69,8 +69,52 @@ public class SystemService {
         }
         ComDataUtil pi = ComDataUtil.getInstance();
         pi.setSystemMap(map);
-        ensureMenuLeaf("innovation-panel", "创新实践", "1,2,3");
+        
+        MenuInfo innovationMenu = ensureMenu("innovation-practice", "创新实践", "1,2,3", null);
+        if (innovationMenu != null) {
+            ensureMenu("social-practice-panel", "社会实践", "1,2,3", innovationMenu.getId());
+            ensureMenu("subject-competition-panel", "学科竞赛", "1,2,3", innovationMenu.getId());
+            ensureMenu("innovation-project-panel", "创新项目", "1,2,3", innovationMenu.getId());
+        }
         ensureMenuLeaf("honor-panel", "荣誉奖励", "1,2,3");
+        
+        // Remove old innovation-panel to prevent duplicates
+        menuInfoRepository.findByName("innovation-panel").ifPresent(m -> menuInfoRepository.delete(m));
+    }
+
+    private MenuInfo ensureMenu(String name, String title, String userTypeIds, Integer pid) {
+        if (name == null || name.isEmpty()) return null;
+        Optional<MenuInfo> byName = menuInfoRepository.findByName(name);
+        if (byName.isPresent()) {
+            MenuInfo menuInfo = byName.get();
+            boolean changed = false;
+            if (!Objects.equals(menuInfo.getPid(), pid)) {
+                menuInfo.setPid(pid);
+                changed = true;
+            }
+            if (title != null && !title.equals(menuInfo.getTitle())) {
+                menuInfo.setTitle(title);
+                changed = true;
+            }
+            if (userTypeIds != null && !userTypeIds.equals(menuInfo.getUserTypeIds())) {
+                menuInfo.setUserTypeIds(userTypeIds);
+                changed = true;
+            }
+            if (changed) {
+                menuInfo = menuInfoRepository.save(menuInfo);
+            }
+            return menuInfo;
+        }
+
+        Integer maxId = menuInfoRepository.findMaxId();
+        int nextId = (maxId == null ? 0 : maxId) + 1;
+        MenuInfo menuInfo = new MenuInfo();
+        menuInfo.setId(nextId);
+        menuInfo.setPid(pid);
+        menuInfo.setName(name);
+        menuInfo.setTitle(title);
+        menuInfo.setUserTypeIds(userTypeIds);
+        return menuInfoRepository.save(menuInfo);
     }
 
     private void ensureMenuLeaf(String name, String title, String userTypeIds) {

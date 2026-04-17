@@ -1,5 +1,6 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.models.Course;
 import cn.edu.sdu.java.server.models.Homework;
 import cn.edu.sdu.java.server.models.HomeworkSubmission;
 import cn.edu.sdu.java.server.models.Student;
@@ -96,6 +97,33 @@ public class HomeworkService {
             Integer maxScore = dataRequest.getInteger("maxScore");
             String attachmentUrl = dataRequest.getString("attachmentUrl");
 
+            // 验证必填参数
+            if (courseId == null) {
+                return CommonMethod.getReturnMessageError("课程ID不能为空");
+            }
+            if (title == null || title.trim().isEmpty()) {
+                return CommonMethod.getReturnMessageError("作业标题不能为空");
+            }
+            if (title.length() > 100) {
+                return CommonMethod.getReturnMessageError("作业标题不能超过100个字符");
+            }
+            if (deadline == null || deadline.isEmpty()) {
+                return CommonMethod.getReturnMessageError("截止时间不能为空");
+            }
+            if (maxScore == null || maxScore <= 0) {
+                return CommonMethod.getReturnMessageError("满分分数必须大于0");
+            }
+            if (maxScore > 1000) {
+                return CommonMethod.getReturnMessageError("满分分数不能超过1000");
+            }
+
+            // 验证日期格式
+            try {
+                LocalDateTime.parse(deadline);
+            } catch (Exception e) {
+                return CommonMethod.getReturnMessageError("日期格式错误，请使用 yyyy-MM-ddTHH:mm:ss 格式");
+            }
+
             Homework homework;
             if (homeworkId != null) {
                 homework = homeworkRepository.findById(homeworkId).orElse(null);
@@ -106,7 +134,12 @@ public class HomeworkService {
                 homework = new Homework();
             }
 
-            homework.setCourse(courseRepository.findById(courseId).orElse(null));
+            Course course = courseRepository.findById(courseId).orElse(null);
+            if (course == null) {
+                return CommonMethod.getReturnMessageError("课程不存在");
+            }
+
+            homework.setCourse(course);
             homework.setTitle(title);
             homework.setContent(content);
             homework.setDeadline(LocalDateTime.parse(deadline));
@@ -198,9 +231,25 @@ public class HomeworkService {
             String content = dataRequest.getString("content");
             String attachmentUrl = dataRequest.getString("attachmentUrl");
 
+            // 验证必填参数
+            if (homeworkId == null) {
+                return CommonMethod.getReturnMessageError("作业ID不能为空");
+            }
+            if (studentId == null) {
+                return CommonMethod.getReturnMessageError("学生ID不能为空");
+            }
+            if (content == null || content.trim().isEmpty()) {
+                return CommonMethod.getReturnMessageError("作业内容不能为空");
+            }
+
             Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
             if (homework == null) {
                 return CommonMethod.getReturnMessageError("作业不存在");
+            }
+
+            // 检查是否已过截止时间
+            if (homework.getDeadline() != null && homework.getDeadline().isBefore(LocalDateTime.now())) {
+                return CommonMethod.getReturnMessageError("该作业已超过截止时间，无法提交");
             }
 
             Student student = studentRepository.findById(studentId).orElse(null);
@@ -237,12 +286,36 @@ public class HomeworkService {
         try {
             Integer submissionId = dataRequest.getInteger("submissionId");
             String scoreStr = dataRequest.getString("score");
-            BigDecimal score = scoreStr != null ? new BigDecimal(scoreStr) : null;
             String comment = dataRequest.getString("comment");
+
+            // 验证必填参数
+            if (submissionId == null) {
+                return CommonMethod.getReturnMessageError("提交记录ID不能为空");
+            }
+            if (scoreStr == null || scoreStr.trim().isEmpty()) {
+                return CommonMethod.getReturnMessageError("分数不能为空");
+            }
+
+            // 验证分数格式
+            BigDecimal score;
+            try {
+                score = new BigDecimal(scoreStr);
+            } catch (Exception e) {
+                return CommonMethod.getReturnMessageError("分数格式错误");
+            }
+
+            if (score.compareTo(BigDecimal.ZERO) < 0) {
+                return CommonMethod.getReturnMessageError("分数不能为负数");
+            }
 
             HomeworkSubmission submission = homeworkSubmissionRepository.findById(submissionId).orElse(null);
             if (submission == null) {
                 return CommonMethod.getReturnMessageError("提交记录不存在");
+            }
+
+            // 检查分数是否超过满分
+            if (submission.getHomework().getMaxScore() != null && score.compareTo(new BigDecimal(submission.getHomework().getMaxScore())) > 0) {
+                return CommonMethod.getReturnMessageError("分数不能超过作业满分（" + submission.getHomework().getMaxScore() + "分）");
             }
 
             submission.setScore(score);
@@ -260,28 +333,55 @@ public class HomeworkService {
 
     /**
      * 获取作业统计
+     * 按照对接规范返回：{"total": 30, "已提交": 25, "已批改": 20, "已逾期": 5, "averageScore": 87.5}
      */
     public DataResponse getHomeworkStatistics(DataRequest dataRequest) {
         try {
-            Integer courseId = dataRequest.getInteger("courseId");
-            List<Homework> homeworkList = homeworkRepository.findByCourseCourseId(courseId);
+            Integer homeworkId = dataRequest.getInteger("homeworkId");
 
-            Map<String, Object> result = new HashMap<>();
-            List<Map<String, Object>> homeworkStats = new ArrayList<>();
-
-            for (Homework h : homeworkList) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("homeworkId", h.getHomeworkId());
-                m.put("title", h.getTitle());
-                long submitCount = homeworkSubmissionRepository.countByHomeworkHomeworkId(h.getHomeworkId());
-                long gradedCount = homeworkSubmissionRepository.countByHomeworkHomeworkIdAndStatus(h.getHomeworkId(), "已批改");
-                m.put("submitCount", submitCount);
-                m.put("gradedCount", gradedCount);
-                m.put("maxScore", h.getMaxScore());
-                homeworkStats.add(m);
+            // 验证参数
+            if (homeworkId == null) {
+                return CommonMethod.getReturnMessageError("请提供homeworkId参数");
             }
 
-            result.put("homeworkList", homeworkStats);
+            // 检查作业是否存在
+            Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
+            if (homework == null) {
+                return CommonMethod.getReturnMessageError("作业不存在");
+            }
+
+            // 获取该作业的所有提交记录
+            List<HomeworkSubmission> submissions = homeworkSubmissionRepository.findByHomeworkHomeworkId(homeworkId);
+            
+            // 统计各状态数量
+            long totalCount = homeworkSubmissionRepository.countByHomeworkHomeworkId(homeworkId);
+            long 已提交 = homeworkSubmissionRepository.countByHomeworkHomeworkIdAndStatus(homeworkId, "已提交");
+            long 已批改 = homeworkSubmissionRepository.countByHomeworkHomeworkIdAndStatus(homeworkId, "已批改");
+            
+            // 计算已逾期数量（已提交但未批改，且超过截止时间）
+            LocalDateTime deadline = homework.getDeadline();
+            long 已逾期 = 0;
+            if (deadline != null) {
+                已逾期 = submissions.stream()
+                    .filter(s -> "已提交".equals(s.getStatus()) || "未提交".equals(s.getStatus()))
+                    .filter(s -> deadline.isBefore(LocalDateTime.now()))
+                    .count();
+            }
+
+            // 计算平均分
+            double averageScore = submissions.stream()
+                .filter(s -> s.getScore() != null)
+                .mapToDouble(s -> s.getScore().doubleValue())
+                .average()
+                .orElse(0.0);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", totalCount);
+            result.put("已提交", 已提交);
+            result.put("已批改", 已批改);
+            result.put("已逾期", 已逾期);
+            result.put("averageScore", Math.round(averageScore * 10.0) / 10.0); // 保留一位小数
+
             return CommonMethod.getReturnData(result);
         } catch (Exception e) {
             log.error("获取作业统计失败", e);

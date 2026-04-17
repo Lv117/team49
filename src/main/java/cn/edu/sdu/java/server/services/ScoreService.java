@@ -1,6 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
 import cn.edu.sdu.java.server.models.Course;
+import cn.edu.sdu.java.server.models.CourseSelection;
 import cn.edu.sdu.java.server.models.Score;
 import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
@@ -8,6 +9,7 @@ import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.payload.response.OptionItem;
 import cn.edu.sdu.java.server.payload.response.OptionItemList;
 import cn.edu.sdu.java.server.repositorys.CourseRepository;
+import cn.edu.sdu.java.server.repositorys.CourseSelectionRepository;
 import cn.edu.sdu.java.server.repositorys.ScoreRepository;
 import cn.edu.sdu.java.server.repositorys.StudentRepository;
 import cn.edu.sdu.java.server.util.CommonMethod;
@@ -22,11 +24,13 @@ public class ScoreService {
     private static final Logger log = LoggerFactory.getLogger(ScoreService.class);
 
     private final CourseRepository courseRepository;
+    private final CourseSelectionRepository courseSelectionRepository;
     private final ScoreRepository scoreRepository;
     private final StudentRepository studentRepository;
 
-    public ScoreService(CourseRepository courseRepository, ScoreRepository scoreRepository, StudentRepository studentRepository) {
+    public ScoreService(CourseRepository courseRepository, CourseSelectionRepository courseSelectionRepository, ScoreRepository scoreRepository, StudentRepository studentRepository) {
         this.courseRepository = courseRepository;
+        this.courseSelectionRepository = courseSelectionRepository;
         this.scoreRepository = scoreRepository;
         this.studentRepository = studentRepository;
     }
@@ -94,10 +98,32 @@ public class ScoreService {
                     userId, scoreId, originalMark, rawMark, new Date());
             return new DataResponse(400, null, ScoreMarkValidator.INVALID_MSG);
         }
+        if (personId == null || courseId == null) {
+            return CommonMethod.getReturnMessageError("添加失败，学生或课程不能为空");
+        }
+        Optional<Student> studentOp = studentRepository.findById(personId);
+        if (studentOp.isEmpty()) {
+            return CommonMethod.getReturnMessageError("添加失败，学生不存在");
+        }
+        Optional<Course> courseOp = courseRepository.findById(courseId);
+        if (courseOp.isEmpty()) {
+            return CommonMethod.getReturnMessageError("添加失败，课程不存在");
+        }
+        List<CourseSelection> selections = courseSelectionRepository.findByStudentPersonIdAndCourseCourseId(personId, courseId);
+        boolean selected = false;
+        for (CourseSelection cs : selections) {
+            if (!"已退课".equals(cs.getStatus())) {
+                selected = true;
+                break;
+            }
+        }
+        if (!selected) {
+            return CommonMethod.getReturnMessageError("添加失败，该学生未选择相应课程");
+        }
         if(s == null) {
             s = new Score();
-            s.setStudent(studentRepository.findById(personId).get());
-            s.setCourse(courseRepository.findById(courseId).get());
+            s.setStudent(studentOp.get());
+            s.setCourse(courseOp.get());
         }
         s.setMark(mark);
         scoreRepository.save(s);

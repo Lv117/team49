@@ -31,7 +31,7 @@ spring:
       minimum-idle: 1
       maximum-pool-size: 2
   jpa:
-#    hibernate.ddl-auto: update
+    hibernate.ddl-auto: none
   servlet:
     multipart:
       max-file-size: 200MB

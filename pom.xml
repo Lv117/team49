@@ -116,6 +116,14 @@
 					<jvmArguments>-Dfile.encoding=utf-8</jvmArguments>
 				</configuration>
 			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.1.0</version>
+				<configuration>
+					<mainClass>cn.edu.sdu.java.server.JavaServerApplication</mainClass>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 	<repositories>

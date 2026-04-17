@@ -99,6 +99,14 @@ public class CourseSelectionService {
             Integer studentId = dataRequest.getInteger("studentId");
             Integer courseId = dataRequest.getInteger("courseId");
 
+            // 验证必填参数
+            if (studentId == null) {
+                return CommonMethod.getReturnMessageError("学生ID不能为空");
+            }
+            if (courseId == null) {
+                return CommonMethod.getReturnMessageError("课程ID不能为空");
+            }
+
             // 检查学生是否存在
             Student student = studentRepository.findById(studentId).orElse(null);
             if (student == null) {
@@ -114,6 +122,13 @@ public class CourseSelectionService {
             // 检查是否已选
             List<CourseSelection> existSelections = courseSelectionRepository.findByStudentPersonIdAndCourseCourseId(studentId, courseId);
             if (!existSelections.isEmpty()) {
+                // 如果是已退课状态，允许重新选
+                CourseSelection existSelection = existSelections.get(0);
+                if ("已退课".equals(existSelection.getStatus())) {
+                    existSelection.setStatus("已选");
+                    courseSelectionRepository.save(existSelection);
+                    return CommonMethod.getReturnMessageOK("重新选课成功");
+                }
                 return CommonMethod.getReturnMessageError("该课程已选，不能重复选课");
             }
 
@@ -234,24 +249,35 @@ public class CourseSelectionService {
 
     /**
      * 获取选课统计
+     * 按照对接规范返回：{"total": 50, "已选": 45, "已退课": 3, "已完成": 2}
      */
     public DataResponse getCourseSelectionStatistics(DataRequest dataRequest) {
         try {
             Integer courseId = dataRequest.getInteger("courseId");
             
-            Map<String, Object> result = new HashMap<>();
-            
-            if (courseId != null) {
-                long totalCount = courseSelectionRepository.countByCourseCourseId(courseId);
-                long selectedCount = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已选").size();
-                long completedCount = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已完成").size();
-                long droppedCount = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已退课").size();
-
-                result.put("totalCount", totalCount);
-                result.put("selectedCount", selectedCount);
-                result.put("completedCount", completedCount);
-                result.put("droppedCount", droppedCount);
+            // 验证参数
+            if (courseId == null) {
+                return CommonMethod.getReturnMessageError("请提供courseId参数");
             }
+
+            // 检查课程是否存在
+            Course course = courseRepository.findById(courseId).orElse(null);
+            if (course == null) {
+                return CommonMethod.getReturnMessageError("课程不存在");
+            }
+
+            // 统计各状态数量
+            long totalCount = courseSelectionRepository.countByCourseCourseId(courseId);
+            List<CourseSelection> selectedList = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已选");
+            List<CourseSelection> completedList = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已完成");
+            List<CourseSelection> droppedList = courseSelectionRepository.findByCourseCourseIdAndStatus(courseId, "已退课");
+
+            // 按照对接规范格式返回（使用中文字段名）
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", totalCount);
+            result.put("已选", selectedList.size());
+            result.put("已退课", droppedList.size());
+            result.put("已完成", completedList.size());
 
             return CommonMethod.getReturnData(result);
         } catch (Exception e) {

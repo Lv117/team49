@@ -100,6 +100,39 @@ public class AttendanceService {
             String type = dataRequest.getString("type");
             String remark = dataRequest.getString("remark");
 
+            // 验证必填参数
+            if (studentId == null) {
+                return CommonMethod.getReturnMessageError("学生ID不能为空");
+            }
+            if (courseId == null) {
+                return CommonMethod.getReturnMessageError("课程ID不能为空");
+            }
+            if (attendanceDate == null || attendanceDate.isEmpty()) {
+                return CommonMethod.getReturnMessageError("考勤日期不能为空");
+            }
+            if (status == null || status.isEmpty()) {
+                return CommonMethod.getReturnMessageError("考勤状态不能为空");
+            }
+
+            // 验证日期格式
+            try {
+                LocalDate.parse(attendanceDate);
+            } catch (Exception e) {
+                return CommonMethod.getReturnMessageError("日期格式错误，请使用 yyyy-MM-dd 格式");
+            }
+
+            // 验证状态值
+            if (!status.matches("^(出席|缺勤|迟到|早退)$")) {
+                return CommonMethod.getReturnMessageError("考勤状态必须为：出席、缺勤、迟到、早退之一");
+            }
+
+            // 验证类型值（如果有）
+            if (type != null && !type.isEmpty()) {
+                if (!type.matches("^(正常|病假|事假|旷课)$")) {
+                    return CommonMethod.getReturnMessageError("考勤类型必须为：正常、病假、事假、旷课之一");
+                }
+            }
+
             Attendance attendance;
             if (attendanceId != null) {
                 attendance = attendanceRepository.findById(attendanceId).orElse(null);
@@ -210,31 +243,69 @@ public class AttendanceService {
 
     /**
      * 获取考勤统计
+     * 按照对接规范返回：{"total": 100, "出勤": 85, "缺勤": 10, "迟到": 3, "早退": 2}
      */
     public DataResponse getAttendanceStatistics(DataRequest dataRequest) {
         try {
             Integer studentId = dataRequest.getInteger("studentId");
             Integer courseId = dataRequest.getInteger("courseId");
+            String startDate = dataRequest.getString("startDate");
+            String endDate = dataRequest.getString("endDate");
+
+            // 验证参数
+            if (studentId == null && courseId == null) {
+                return CommonMethod.getReturnMessageError("请提供studentId或courseId参数");
+            }
 
             Map<String, Object> result = new HashMap<>();
-            
-            if (studentId != null) {
-                List<Object[]> stats = attendanceRepository.countByStatus(studentId);
-                Map<String, Long> statMap = new HashMap<>();
-                for (Object[] stat : stats) {
-                    statMap.put((String) stat[0], (Long) stat[1]);
+            List<Attendance> attendanceList;
+
+            // 根据条件查询考勤记录
+            if (studentId != null && courseId != null) {
+                if (startDate != null && endDate != null) {
+                    LocalDate start = LocalDate.parse(startDate);
+                    LocalDate end = LocalDate.parse(endDate);
+                    attendanceList = attendanceRepository.findByStudentPersonIdAndCourseCourseId(studentId, courseId)
+                        .stream()
+                        .filter(a -> !a.getAttendanceDate().isBefore(start) && !a.getAttendanceDate().isAfter(end))
+                        .toList();
+                } else {
+                    attendanceList = attendanceRepository.findByStudentPersonIdAndCourseCourseId(studentId, courseId);
                 }
-                result.put("byStudent", statMap);
+            } else if (studentId != null) {
+                if (startDate != null && endDate != null) {
+                    LocalDate start = LocalDate.parse(startDate);
+                    LocalDate end = LocalDate.parse(endDate);
+                    attendanceList = attendanceRepository.findByStudentPersonIdAndAttendanceDateBetween(studentId, start, end);
+                } else {
+                    attendanceList = attendanceRepository.findByStudentPersonId(studentId);
+                }
+            } else {
+                if (startDate != null && endDate != null) {
+                    LocalDate start = LocalDate.parse(startDate);
+                    LocalDate end = LocalDate.parse(endDate);
+                    attendanceList = attendanceRepository.findByCourseCourseId(courseId)
+                        .stream()
+                        .filter(a -> !a.getAttendanceDate().isBefore(start) && !a.getAttendanceDate().isAfter(end))
+                        .toList();
+                } else {
+                    attendanceList = attendanceRepository.findByCourseCourseId(courseId);
+                }
             }
 
-            if (courseId != null) {
-                List<Object[]> stats = attendanceRepository.countByStatusByCourse(courseId);
-                Map<String, Long> statMap = new HashMap<>();
-                for (Object[] stat : stats) {
-                    statMap.put((String) stat[0], (Long) stat[1]);
-                }
-                result.put("byCourse", statMap);
-            }
+            // 统计各状态数量
+            long totalCount = attendanceList.size();
+            long 出勤 = attendanceList.stream().filter(a -> "出勤".equals(a.getStatus())).count();
+            long 缺勤 = attendanceList.stream().filter(a -> "缺勤".equals(a.getStatus())).count();
+            long 迟到 = attendanceList.stream().filter(a -> "迟到".equals(a.getStatus())).count();
+            long 早退 = attendanceList.stream().filter(a -> "早退".equals(a.getStatus())).count();
+
+            // 按照对接规范格式返回
+            result.put("total", totalCount);
+            result.put("出勤", 出勤);
+            result.put("缺勤", 缺勤);
+            result.put("迟到", 迟到);
+            result.put("早退", 早退);
 
             return CommonMethod.getReturnData(result);
         } catch (Exception e) {

@@ -75,4 +75,7 @@ public class Person {
     @Basic(fetch = FetchType.LAZY)
     @Column(name=" photo", columnDefinition="longblob", nullable=true)
     private byte[] photo;
+
+    @Column(name = "photo_path", length = 255, nullable = true)
+    private String photoPath;  // 头像文件路径(相对路径,如 avatars/uuid.jpg)
 }
