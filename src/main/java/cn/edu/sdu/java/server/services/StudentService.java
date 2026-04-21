@@ -39,7 +39,10 @@ public class StudentService {
     private final FamilyMemberRepository familyMemberRepository;
     private final SystemService systemService;
     private final ScoreRepository scoreRepository;
-    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SystemService systemService, ScoreRepository scoreRepository) {
+    private final DevelopmentRepository developmentRepository;
+    private final AttendanceRepository attendanceRepository;
+    
+    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SystemService systemService, ScoreRepository scoreRepository, DevelopmentRepository developmentRepository, AttendanceRepository attendanceRepository) {
         this.personRepository = personRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -49,6 +52,8 @@ public class StudentService {
         this.familyMemberRepository = familyMemberRepository;
         this.systemService = systemService;
         this.scoreRepository = scoreRepository;
+        this.developmentRepository = developmentRepository;
+        this.attendanceRepository = attendanceRepository;
     }
 
     public Map<String,Object> getMapFromStudent(Student s) {
@@ -514,5 +519,134 @@ public class StudentService {
         data.put("markList", getStudentMarkList(sList));
         data.put("feeList", getStudentFeeList(s.getPersonId()));
         return CommonMethod.getReturnData(data);//将前端所需数据保留Map对象里，返还前端
+    }
+
+    /**
+     * 获取学生个人画像数据(聚合基本信息、成绩、考勤、实践荣誉等)
+     */
+    public DataResponse getStudentPortrait(DataRequest dataRequest) {
+        Integer studentId = dataRequest.getInteger("studentId");
+        
+        // 如果未传studentId,使用当前登录用户
+        if (studentId == null || studentId <= 0) {
+            String username = CommonMethod.getUsername();
+            Optional<Student> sOp = studentRepository.findByPersonNum(username);
+            if (sOp.isPresent()) {
+                studentId = sOp.get().getPersonId();
+            }
+        }
+        
+        if (studentId == null || studentId <= 0) {
+            return CommonMethod.getReturnMessageError("学生ID不能为空");
+        }
+        
+        Map<String, Object> portrait = new HashMap<>();
+        
+        // 1. 基本信息
+        Optional<Student> sOp = studentRepository.findById(studentId);
+        if (sOp.isPresent()) {
+            Student student = sOp.get();
+            portrait.put("basicInfo", getMapFromStudent(student));
+        } else {
+            return CommonMethod.getReturnMessageError("学生不存在");
+        }
+        
+        // 2. 成绩雷达图数据(按课程统计平均分)
+        List<Score> scoreList = scoreRepository.findByStudentPersonId(studentId);
+        List<Map<String, Object>> scoreRadar = new ArrayList<>();
+        if (scoreList != null && !scoreList.isEmpty()) {
+            for (Score score : scoreList) {
+                Map<String, Object> scoreItem = new HashMap<>();
+                scoreItem.put("courseName", score.getCourse() != null ? score.getCourse().getName() : "未知课程");
+                scoreItem.put("score", score.getMark());
+                scoreRadar.add(scoreItem);
+            }
+        }
+        portrait.put("scoreRadar", scoreRadar);
+        
+        // 3. 考勤统计
+        List<Attendance> attendanceList = attendanceRepository.findByStudentPersonId(studentId);
+        Map<String, Object> attendanceStats = new HashMap<>();
+        int total = attendanceList != null ? attendanceList.size() : 0;
+        int present = 0, absent = 0, late = 0, earlyLeave = 0;
+        
+        if (attendanceList != null) {
+            for (Attendance attendance : attendanceList) {
+                String status = attendance.getStatus();
+                if ("出勤".equals(status)) {
+                    present++;
+                } else if ("缺勤".equals(status)) {
+                    absent++;
+                } else if ("迟到".equals(status)) {
+                    late++;
+                } else if ("早退".equals(status)) {
+                    earlyLeave++;
+                }
+            }
+        }
+        
+        attendanceStats.put("total", total);
+        attendanceStats.put("present", present);
+        attendanceStats.put("absent", absent);
+        attendanceStats.put("late", late);
+        attendanceStats.put("earlyLeave", earlyLeave);
+        attendanceStats.put("attendanceRate", total > 0 ? String.format("%.2f%%", (double) present / total * 100) : "0%");
+        portrait.put("attendanceStats", attendanceStats);
+        
+        // 4. 实践荣誉统计(按类型统计)
+        List<StudentDevelopment> developmentList = developmentRepository.findByStudentId(studentId);
+        Map<String, Object> developmentStats = new HashMap<>();
+        int honorCount = 0, innovationCount = 0, competitionCount = 0, achievementCount = 0;
+        int approvedCount = 0;
+        
+        if (developmentList != null) {
+            for (StudentDevelopment dev : developmentList) {
+                String type = dev.getDevelopmentType();
+                if ("honor".equals(type)) {
+                    honorCount++;
+                } else if ("innovation".equals(type)) {
+                    innovationCount++;
+                } else if ("competition".equals(type)) {
+                    competitionCount++;
+                } else if ("achievement".equals(type)) {
+                    achievementCount++;
+                }
+                
+                if ("approved".equals(dev.getStatus())) {
+                    approvedCount++;
+                }
+            }
+        }
+        
+        developmentStats.put("total", developmentList != null ? developmentList.size() : 0);
+        developmentStats.put("honorCount", honorCount);
+        developmentStats.put("innovationCount", innovationCount);
+        developmentStats.put("competitionCount", competitionCount);
+        developmentStats.put("achievementCount", achievementCount);
+        developmentStats.put("approvedCount", approvedCount);
+        portrait.put("developmentStats", developmentStats);
+        
+        // 5. 消费趋势(最近6个月)
+        List<Fee> feeList = feeRepository.findListByStudent(studentId);
+        List<Map<String, Object>> consumptionTrend = new ArrayList<>();
+        if (feeList != null && !feeList.isEmpty()) {
+            // 简单按月统计(实际应该用SQL GROUP BY)
+            Map<String, Double> monthMap = new LinkedHashMap<>();
+            for (Fee fee : feeList) {
+                if (fee.getDay() != null && !fee.getDay().isEmpty()) {
+                    String month = fee.getDay().substring(0, 7); // yyyy-MM
+                    monthMap.merge(month, fee.getMoney(), Double::sum);
+                }
+            }
+            for (Map.Entry<String, Double> entry : monthMap.entrySet()) {
+                Map<String, Object> trendItem = new HashMap<>();
+                trendItem.put("month", entry.getKey());
+                trendItem.put("amount", entry.getValue());
+                consumptionTrend.add(trendItem);
+            }
+        }
+        portrait.put("consumptionTrend", consumptionTrend);
+        
+        return CommonMethod.getReturnData(portrait);
     }
 }

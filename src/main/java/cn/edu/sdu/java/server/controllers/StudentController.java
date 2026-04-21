@@ -153,4 +153,13 @@ public class StudentController {
     public DataResponse getStudentIntroduceData(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.getStudentIntroduceData(dataRequest);
     }
+
+    /**
+     * 获取学生个人画像数据(聚合基本信息、成绩、考勤、实践荣誉等)
+     */
+    @PostMapping("/getStudentPortrait")
+    @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN') or hasRole('TEACHER')")
+    public DataResponse getStudentPortrait(@Valid @RequestBody DataRequest dataRequest) {
+        return studentService.getStudentPortrait(dataRequest);
+    }
 }
