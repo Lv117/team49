@@ -29,9 +29,9 @@ public class DevelopmentController {
     /**
      * 分页获取发展记录数据
      */
-    @PostMapping("/getDevelopmentPageData")
+    @PostMapping("/getDevelopmentPageList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
-    public DataResponse getDevelopmentPageData(@Valid @RequestBody DataRequest dataRequest) {
+    public DataResponse getDevelopmentPageList(@Valid @RequestBody DataRequest dataRequest) {
         return developmentService.getDevelopmentPageData(dataRequest);
     }
 

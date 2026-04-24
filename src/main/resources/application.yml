@@ -37,14 +37,11 @@ spring:
       max-file-size: 200MB
       max-request-size: 200MB
   jmx:
-    enabled:false
-  http:
-    encoding:
-      charset: UTF-8
-      enabled: true
-      force: true
+    enabled: false
+
 attach:
   folder: /Java_project/
+
 logging:
   config: classpath:loggback.xml
 #logging:

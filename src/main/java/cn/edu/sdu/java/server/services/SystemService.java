@@ -70,12 +70,17 @@ public class SystemService {
         ComDataUtil pi = ComDataUtil.getInstance();
         pi.setSystemMap(map);
         
-        MenuInfo innovationMenu = ensureMenu("innovation-practice", "创新实践", "1,2,3", null);
+        // 创新创业板块菜单初始化
+        MenuInfo innovationMenu = ensureMenu("innovation", "创新创业", "1,2,3", null);
         if (innovationMenu != null) {
-            ensureMenu("social-practice-panel", "社会实践", "1,2,3", innovationMenu.getId());
-            ensureMenu("subject-competition-panel", "学科竞赛", "1,2,3", innovationMenu.getId());
-            ensureMenu("innovation-project-panel", "创新项目", "1,2,3", innovationMenu.getId());
+            ensureMenu("innovation-project", "创业实践", "1,2,3", innovationMenu.getId());
+            ensureMenu("competition", "学科竞赛", "1,2,3", innovationMenu.getId());
+            ensureMenu("achievement", "科研成果", "1,2,3", innovationMenu.getId());
         }
+        
+        // 清理旧的 innovation-practice 菜单
+        menuInfoRepository.findByName("innovation-practice").ifPresent(m -> menuInfoRepository.delete(m));
+        
         ensureMenuLeaf("honor-panel", "荣誉奖励", "1,2,3");
         
         // Remove old innovation-panel to prevent duplicates
