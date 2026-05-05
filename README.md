@@ -146,27 +146,34 @@
 
 **中期总结:前后端基础框架全部完成,可立即进入中期补充阶段!**
 
-## 中期补充:功能扩展 + 模块合并优化(2-3 天)✅ 部分完成
+## 中期补充:功能扩展 + 模块合并优化(2-3 天)✅ 部分完成 (后端核心功能已就绪)
 
 **目标**: 根据老师建议扩展功能,优化模块设计,为后期高分点打基础
 
-### 已完成任务
+### 已完成任务 (后端)
 
-1. ✅ 创新创业板块后端合并(DevelopmentController/Service 已实现,支持3种类型)
+1. ✅ 创新创业板块后端实现(前端沿用InnovationController,接口路径`/api/innovation/*`,功能已验证稳定)
 2. ✅ 学生个人画像接口(getStudentPortrait 已实现,聚合多维度数据)
 3. ✅ 数据库迁移脚本准备(student_development 表 SQL 已编写)
 4. ✅ 接口文档更新(对接规范.md 已补充 DevelopmentController 接口说明)
-5. ✅ 创新创业板块前端菜单调整(创业实践、学科竞赛、科研成果)
+5. ✅ 社会实践板块扩展(SocialPracticeController 支持4种实践类型)
+6. ✅ 课程中心功能(CourseMaterial 实体及上传下载接口已实现)
+7. ✅ 学生消费日志管理(Consumption 实体、统计及Excel导入接口已实现)
+
+### 待完成任务 (后端)
+
+1. ⭐ 综合绩分计算引擎(ScoreCalculationService 待开发)
+2. ⭐ 个人简历自动生成(PDF生成逻辑待开发)
 
 ### 人员分工
 
 |角色|核心工作内容(严格贴合老师功能建议)|完成度|
 |---|---|---|
-|后1|1. **创新创业板块合并**(主导): 创建DevelopmentController和StudentDevelopment统一实体,实现innovation/competition/achievement 3种类型路由,数据库建表(student_development),支持创业实践、学科竞赛、科研成果;<br>2. **学生个人画像后端接口**: 在StudentController中新增getStudentPortrait接口,聚合学生基本信息(Person/Student)、成绩(Score)、考勤(Attendance)、发展记录(StudentDevelopment)、请假(StudentLeave)、消费(Fee)数据,返回JSON支持前端综合统计扩展;<br>3. **接口文档更新**: 对接规范.md 第十八章创新创业模块6个接口文档已更新,测试状态标记为已通过;<br>4. **菜单初始化代码修复**: SystemService.java中菜单初始化逻辑已更新为“创新创业”板块,自动清理旧菜单;<br>5. **前端配合**: 配合前2完成创新创业3种类型表单、审批界面的联调测试。|✅ 100% 已完成|
-|后2|1. **课程中心功能开发**: 创建CourseMaterial实体,在StudentController中新增getCourseMaterialList/courseMaterialSave/courseMaterialDelete接口,实现文件上传下载(支持PDF/PPT/Word格式,单文件最大50MB),课程资源分类管理(course_type字段),权限控制(仅教师/管理员可上传);<br>2. **学生消费日志管理**: 在StudentController中新增getConsumptionList/consumptionSave/consumptionDelete接口,消费分类(dining/study/transport/life/entertainment),月度消费趋势统计接口(getMonthlyConsumptionStats),Excel批量导入(importConsumptionData);<br>3. **综合绩分计算引擎**: 设计可配置绩分公式(成绩40%+考勤20%+实践20%+荣誉20%),实现ScoreCalculationService计算引擎,支持管理员自定义权重配置,在StudentController中新增getScoreCalculation/updateScoreWeight接口;<br>4. **配合统1联调**: 协助完成课程中心、消费日志、绩分计算接口的前后端联调。|⏳ 待开始|
-|前1|1. **消费日志界面**: 开发ConsumptionPanel.fxml,实现消费记录录入表单(consumption_type下拉选择)、月度消费趋势柱状图、Excel导入按钮;<br>2. **简历预览界面**: 开发ResumePreviewPanel.fxml,实现简历PDF预览(WebView嵌入)、下载按钮、打印功能;<br>3. **主框架UI优化**: 左下角"切换账号"下拉按钮增强视觉效果(换为醒目的蓝色/橙色渐变背景,hover时加深,选中项高亮),底部项目人员信息栏样式优化(增加边框、背景色、字体加粗,确保清晰醒目);<br>4. **联调配合**: 与后1(荣誉创新+个人画像)、后2(消费日志+绩分计算)逐一验证接口数据渲染正确性。|⏳ 待开始|
-|前2|1. **课程中心界面**: 开发CourseCenterPanel.fxml,实现资源列表(支持course_type筛选)、上传界面(FileChooser选择文件、ProgressBar显示进度)、下载按钮、教师上传权限控制;<br>2. **荣誉创新板块界面**: 开发统一列表界面(支持4种类型筛选),统一表单界面(根据development_type动态显示不同字段:荣誉显示level/issuer,创新显示field/outcome,竞赛显示competition_name/award,成果显示patent_type/status),统一审批界面;<br>3. **综合绩分展示界面**: 开发ScoreCalculationPanel.fxml,实现绩分展示界面(显示各项得分明细)、权重配置表单(管理员可调整4项权重)、学生排名TableView;<br>4. **个人画像界面扩展**: 在现有StudentController/getStudentIntroduceData基础上,扩展综合统计tab,使用JavaFX内置PieChart(消费分布)、BarChart(考勤统计)、LineChart(成绩趋势)、自定义雷达图(综合能力)展示学生多维度数据;<br>5. **联调配合**: 与后1(荣誉创新+个人画像)、后2(课程中心+消费日志+绩分计算)逐一验证接口数据渲染正确性。|⏳ 待开始|
-|统1|1. **社会实践板块扩展**(主导): 在DailyActivity实体基础上新增training(培训讲座)、internship(校外实习)两种实践类型,更新SocialPracticeController支持3种类型(daily_activity/training/internship),更新前端DailyActivityPanel.fxml新增类型下拉选项和表单字段;<br>2. **合并方案审核**: 在后1完成荣誉创新合并后,审核StudentDevelopment实体设计、DevelopmentController路由逻辑、数据库迁移脚本,确保创新5接口+荣誉5接口合并为6接口后功能完整、历史数据不丢失;<br>3. **教师角色权限扩展**: 在Spring Security配置中增加ROLE_TEACHER角色,扩展HonorActivityController和InnovationController的审批接口支持教师审批(@PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")),在StudentController中新增教师专属接口(教师审批学生请假、教师查看所教课程成绩统计),确保教师可正常登录并拥有审批权限;<br>4. **联调总协调**: 建立联调问题清单(Excel跟踪),协调后1(荣誉创新4类型+个人画像)、后2(课程中心+消费日志4分类+绩分计算)、前1(消费日志界面+简历预览+主框架UI)、前2(课程中心界面+荣誉创新界面+绩分展示+个人画像)的接口联调进度,每日推动问题闭环;<br>5. **接口文档更新**: 补充11个新增/重构接口的详细信息到对接规范.md: 荣誉创新6个接口(含development_type参数说明)、社会实践5个接口(含practice_type参数说明)、个人画像1个聚合接口、绩分计算2个接口(计算+权重配置);<br>6. **全量功能测试+Bug修复**: 编写测试用例,验证荣誉创新4种类型CRUD、社会实践3种类型CRUD、课程中心文件上传下载(大文件/多格式)、消费日志Excel导入、绩分计算准确性(4项加权)、个人画像数据聚合完整性、教师角色权限正确性;修复联调测试中发现的前后端bug,包括接口参数校验错误、数据渲染异常、权限控制漏洞、表单提交失败等,确保所有功能稳定运行;修复后进行回归测试,保证修复不影响其他功能模块。|⏳ 待开始|
+|后1|1. **创新创业板块合并**(主导): 前端沿用 InnovationController,接口路径为 `/api/innovation/*`,功能已验证稳定,不再强制切换;<br>2. **学生个人画像后端接口**: 在StudentController中新增getStudentPortrait接口,聚合学生基本信息(Person/Student)、成绩(Score)、考勤(Attendance)、发展记录(StudentDevelopment)、请假(StudentLeave)、消费(Fee)数据,返回JSON支持前端综合统计扩展;<br>3. **接口文档更新**: 对接规范.md 第十八章创新创业模块6个接口文档已更新,测试状态标记为已通过;<br>4. **菜单初始化代码修复**: SystemService.java中菜单初始化逻辑已更新为"创新创业"板块,自动清理旧菜单;<br>5. **社会实践板块扩展**: 配合统1完成SocialPracticeController,支持日常活动/培训讲座/校外实习/志愿服务4种类型。|✅ 100% 已完成|
+|后2|1. **课程中心功能开发**: 创建CourseMaterial实体,在StudentController中新增getCourseMaterialList/courseMaterialSave/courseMaterialDelete/courseMaterialDownload接口,实现文件上传下载(支持PDF/PPT/Word格式,单文件最大50MB),课程资源分类管理(course_type字段),权限控制(仅教师/管理员可上传);<br>2. **学生消费日志管理**: 在StudentController中新增getConsumptionList/consumptionSave/consumptionDelete/getMonthlyConsumptionStats/importConsumptionData接口,消费分类(dining/study/transport/life/entertainment),月度消费趋势统计接口,Excel批量导入;<br>3. **综合绩分计算引擎**: ⚠️ 前端已完成ScoreCalculationController,后端待开发 ScoreCalculationService;<br>4. **个人简历生成**: ⚠️ 前端已完成ResumePreviewController,后端待开发 PDF生成接口。|⏳ 核心功能已完成,绩分与简历接口待补全|
+|前1|1. **消费日志界面**: ✅ 已实现ConsumptionPanel.fxml,月度消费趋势柱状图、Excel导入按钮已完成;<br>2. **简历预览界面**: ✅ 已实现ResumePreviewPanel.fxml,与个人画像共用控制器,具备预览和打印功能;<br>3. **主框架UI优化**: 左下角"切换账号"下拉按钮增强视觉效果,底部项目人员信息栏样式优化;<br>4. **联调配合**: 与后1(荣誉创新+个人画像)、后2(消费日志+绩分计算)逐一验证接口数据渲染正确性。|✅ 核心界面已完成,绩分展示待联调|
+|前2|1. **课程中心界面**: ✅ 已实现CourseCenterPanel.fxml,资源列表、上传界面、下载按钮已完成;<br>2. **荣誉创新板块界面**: ✅ 前端沿用InnovationController,三种类型(创业实践/学科竞赛/科研成果)表单已完成;<br>3. **综合绩分展示界面**: ✅ 已实现ScoreCalculationPanel.fxml,绩分展示、权重配置表单、学生排名TableView已完成;<br>4. **个人画像界面扩展**: ✅ 已实现多维度数据展示(成绩雷达图、考勤统计、消费趋势);<br>5. **联调配合**: 与后1(荣誉创新+个人画像)、后2(课程中心+消费日志+绩分计算)逐一验证接口数据渲染正确性。|✅ 核心界面已完成,部分接口待联调|
+|统1|1. **社会实践板块扩展**(主导): ✅ 已完成SocialPracticeController,支持4种实践类型;<br>2. **合并方案审核**: 创新创业板块前端沿用InnovationController,功能稳定;<br>3. **教师角色权限扩展**: ✅ 已在Spring Security配置中增加ROLE_TEACHER角色;<br>4. **联调总协调**: ✅ 已完成个人画像、课程中心、消费日志联调;<br>5. **接口文档更新**: ✅ 对接规范.md已补充各模块接口说明;<br>6. **全量功能测试+Bug修复**: 持续进行中。|✅ 核心协调工作已完成,持续跟进联调|
 
 ### 中期补充完成后系统板块结构
 
@@ -219,15 +226,15 @@
 ### 交付物
 
 1. ✅ 荣誉奖励板块(HonorController/Service,荣誉奖励功能独立)
-2. ✅ 创新创业板块(DevelopmentController/Service,含创业实践、学科竞赛、科研成果)
-3. ⭐ 社会实践板块(SocialPracticeController,含日常活动、培训讲座、校外实习、志愿服务)
-4. ⭐ 课程中心功能(CourseMaterial实体、文件上传下载接口)
-5. ⭐ 学生消费日志管理(消费分类、月度统计、Excel导入)
+2. ✅ 创新创业板块(InnovationController,前端沿用旧版接口,含创业实践、学科竞赛、科研成果)
+3. ✅ 社会实践板块(SocialPracticeController,含日常活动、培训讲座、校外实习、志愿服务)
+4. ✅ 课程中心功能(CourseMaterial实体、文件上传下载接口)
+5. ✅ 学生消费日志管理(消费分类、月度统计、Excel导入)
 6. ✅ 学生个人画像后端接口(getStudentPortrait聚合接口)
-7. ⭐ 综合绩分计算系统(可配置公式、自定义权重)
-8. ⭐ 个人简历自动生成(PDF格式、预览下载打印)
-9. ✅ 接口文档更新(对接规范.md 第十八章创新创业模块)
-10. ✅ 数据库建表脚本(student_development 表)
+7. ⭐ 综合绩分计算系统(前端已完成ScoreCalculationPanel,后端待开发计算引擎接口)
+8. ⭐ 个人简历自动生成(前端已完成ResumePreviewPanel,后端待开发PDF生成接口)
+9. ✅ 接口文档更新(对接规范.md 第十八至二十五章)
+10. ✅ 数据库建表脚本(student_development, course_material, fee扩展字段)
 
 ### 验收标准
 
@@ -237,9 +244,9 @@
 - ✅ **课程中心支持文件上传下载** - 支持PDF/PPT/Word格式
 - ✅ **消费日志记录完整** - 统计准确,Excel导入正常
 - ✅ **个人画像数据可视化清晰** - 多维度数据展示完整
-- ✅ **综合绩分计算可配置** - 公式计算准确,排名正确
-- ✅ **个人简历生成格式规范** - PDF格式正确,信息完整
-- ✅ **所有新增接口联调通过** - 全部测试通过
+- ⭐ **综合绩分计算可配置** - ⏳ 待开发
+- ⭐ **个人简历生成格式规范** - ⏳ 待开发
+- ✅ **所有新增接口联调通过** - 核心业务接口全部测试通过
 - ✅ **前端界面美观** - 交互流畅,视觉协调,板块命名统一
 - ✅ **数据库迁移无数据丢失** - 历史数据完整保留
 
