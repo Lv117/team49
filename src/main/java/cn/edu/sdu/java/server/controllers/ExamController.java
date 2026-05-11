@@ -47,6 +47,17 @@ public class ExamController {
         }
     }
 
+    @PostMapping("/getTeacherOptionList")
+    public OptionItemList getTeacherOptionList(@RequestBody DataRequest req) {
+        try {
+            List<OptionItem> teacherList = examScheduleService.getTeacherOptionList();
+            return new OptionItemList(0, teacherList);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new OptionItemList(1, null);
+        }
+    }
+
     @PostMapping("/getExamScheduleList")
     public DataResponse getExamScheduleList(@RequestBody DataRequest req) {
         try {

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * CourseSelection 选课数据操作接口
@@ -52,4 +53,7 @@ public interface CourseSelectionRepository extends JpaRepository<CourseSelection
      */
     @Query("SELECT cs FROM CourseSelection cs JOIN FETCH cs.student s JOIN FETCH s.person JOIN FETCH cs.course WHERE cs.course.courseId = ?1 AND cs.status = ?2")
     List<CourseSelection> findByCourseCourseIdAndStatus(Integer courseId, String status);
+
+    @Query("SELECT DISTINCT cs.student.personId FROM CourseSelection cs WHERE cs.course.courseId IN ?1 AND (cs.status IS NULL OR cs.status <> '已退课')")
+    Set<Integer> findDistinctStudentIdsByCourseIds(List<Integer> courseIds);
 }

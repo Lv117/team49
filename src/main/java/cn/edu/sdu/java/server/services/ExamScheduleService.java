@@ -8,6 +8,7 @@ import java.util.Map;
 public interface ExamScheduleService {
     List<OptionItem> getYearSemesterOptionList();
     List<OptionItem> getCourseOptionList();
+    List<OptionItem> getTeacherOptionList();
     List<Map<String, Object>> getExamScheduleList(Integer yearSemesterId, String courseName, String keyword);
     List<Map<String, Object>> getStudentExamScheduleList(String studentId, Integer yearSemesterId);
     List<Map<String, Object>> getExamStudentList(String examId);

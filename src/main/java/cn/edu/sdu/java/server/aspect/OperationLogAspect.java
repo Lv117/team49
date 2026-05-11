@@ -76,7 +76,8 @@ public class OperationLogAspect {
             
             // 构建日志信息
             ModifyLog modifyLog = new ModifyLog();
-            modifyLog.setType(exception == null ? "INFO" : "ERROR");
+            // ModifyLog.type 长度上限为 4，避免写入 "ERROR" 触发校验失败
+            modifyLog.setType(exception == null ? "INFO" : "ERR");
             // 使用简短标识，避免超过 20 字符限制
             String tableName = className;
             if (tableName.length() > 20) {
@@ -91,6 +92,9 @@ public class OperationLogAspect {
                 logInfo += " | 异常：" + exception.getMessage();
             }
             
+            if (logInfo != null && logInfo.length() > 2000) {
+                logInfo = logInfo.substring(0, 2000);
+            }
             modifyLog.setInfo(logInfo);
             modifyLog.setOperateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             modifyLog.setOperatorId(operatorId);

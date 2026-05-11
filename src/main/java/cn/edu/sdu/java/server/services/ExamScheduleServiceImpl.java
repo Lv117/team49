@@ -3,14 +3,19 @@ package cn.edu.sdu.java.server.services;
 import cn.edu.sdu.java.server.models.Course;
 import cn.edu.sdu.java.server.models.CourseSelection;
 import cn.edu.sdu.java.server.models.ExamSchedule;
+import cn.edu.sdu.java.server.models.Score;
 import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.models.StudentExamSchedule;
+import cn.edu.sdu.java.server.models.Teacher;
 import cn.edu.sdu.java.server.payload.response.OptionItem;
 import cn.edu.sdu.java.server.repositorys.CourseRepository;
 import cn.edu.sdu.java.server.repositorys.CourseSelectionRepository;
 import cn.edu.sdu.java.server.repositorys.ExamScheduleRepository;
+import cn.edu.sdu.java.server.repositorys.ScoreRepository;
 import cn.edu.sdu.java.server.repositorys.StudentExamScheduleRepository;
 import cn.edu.sdu.java.server.repositorys.StudentRepository;
+import cn.edu.sdu.java.server.repositorys.TeacherRepository;
+import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +45,10 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
 
     @Autowired
     private CourseSelectionRepository courseSelectionRepository;
+    @Autowired
+    private TeacherRepository teacherRepository;
+    @Autowired
+    private ScoreRepository scoreRepository;
 
     @Override
     public List<OptionItem> getYearSemesterOptionList() {
@@ -61,6 +70,21 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
             courseList.add(new OptionItem(course.getCourseId(), course.getNum(), course.getName()));
         }
         return courseList;
+    }
+
+    @Override
+    public List<OptionItem> getTeacherOptionList() {
+        List<Teacher> teachers = teacherRepository.findAll();
+        List<OptionItem> teacherList = new ArrayList<>();
+        for (Teacher teacher : teachers) {
+            if (teacher.getPerson() == null) {
+                continue;
+            }
+            String num = teacher.getPerson().getNum() == null ? "" : teacher.getPerson().getNum();
+            String name = teacher.getPerson().getName() == null ? "" : teacher.getPerson().getName();
+            teacherList.add(new OptionItem(teacher.getPersonId(), num, name));
+        }
+        return teacherList;
     }
 
     @Override
@@ -167,6 +191,19 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         if (examSchedule == null) {
             return result;
         }
+        String roleName = CommonMethod.getRoleName();
+        String username = CommonMethod.getUsername();
+        if ("ROLE_TEACHER".equals(roleName)) {
+            Optional<Teacher> tOp = teacherRepository.findByPersonNum(username);
+            if (tOp.isEmpty() || tOp.get().getPerson() == null) {
+                throw new RuntimeException("教师信息不存在，无法查看该考试学生");
+            }
+            String teacherName = tOp.get().getPerson().getName();
+            String examTeacher = examSchedule.getTeacher();
+            if (examTeacher == null || (!examTeacher.equals(teacherName) && !examTeacher.contains(teacherName))) {
+                throw new RuntimeException("无权查看非本人授课课程的学生成绩");
+            }
+        }
 
         List<CourseSelection> courseSelections = new ArrayList<>();
         if (examSchedule.getCourseId() != null) {
@@ -209,6 +246,25 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
             row.put("num", studentNum == null ? "" : studentNum);
             row.put("examTicket", examTicket);
             row.put("seatNumber", seatNumber);
+            String mark = "";
+            String ranking = "";
+            if (examSchedule.getCourseId() != null) {
+                List<Score> scoreList = scoreRepository.findByStudentCourse(student.getPersonId(), examSchedule.getCourseId());
+                if (scoreList != null && !scoreList.isEmpty()) {
+                    Score score = scoreList.get(0);
+                    mark = score.getMark() == null ? "" : score.getMark().toString();
+                    ranking = score.getRanking() == null ? "" : score.getRanking().toString();
+                }
+            } else if (examSchedule.getCourseName() != null && !examSchedule.getCourseName().isEmpty()) {
+                List<Score> scoreList = scoreRepository.findByStudentCourse(student.getPersonId(), examSchedule.getCourseName());
+                if (scoreList != null && !scoreList.isEmpty()) {
+                    Score score = scoreList.get(0);
+                    mark = score.getMark() == null ? "" : score.getMark().toString();
+                    ranking = score.getRanking() == null ? "" : score.getRanking().toString();
+                }
+            }
+            row.put("mark", mark);
+            row.put("ranking", ranking);
             result.add(row);
         }
         return result;

@@ -86,7 +86,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public DataResponse handleRuntimeException(RuntimeException e) {
-        log.error("业务错误：{}", e.getMessage());
+        log.error("业务错误：{}", e.getMessage(), e);
         return DataResponse.error("业务错误：" + e.getMessage());
     }
 

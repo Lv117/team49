@@ -2,10 +2,12 @@ package cn.edu.sdu.java.server.services;
 
 import cn.edu.sdu.java.server.models.ApprovalRecord;
 import cn.edu.sdu.java.server.models.StudentDevelopment;
+import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.ApprovalRecordRepository;
 import cn.edu.sdu.java.server.repositorys.DevelopmentRepository;
+import cn.edu.sdu.java.server.repositorys.StudentRepository;
 import cn.edu.sdu.java.server.util.ApprovalStateMachine;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.data.domain.Page;
@@ -20,11 +22,17 @@ import java.util.*;
 public class DevelopmentService {
     private final DevelopmentRepository developmentRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
+    private final StudentRepository studentRepository;
+    private final TeacherDataScopeService teacherDataScopeService;
 
     public DevelopmentService(DevelopmentRepository developmentRepository,
-                              ApprovalRecordRepository approvalRecordRepository) {
+                              ApprovalRecordRepository approvalRecordRepository,
+                              StudentRepository studentRepository,
+                              TeacherDataScopeService teacherDataScopeService) {
         this.developmentRepository = developmentRepository;
         this.approvalRecordRepository = approvalRecordRepository;
+        this.studentRepository = studentRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
     }
 
     // ==================== 统一类型路由 ====================
@@ -69,8 +77,22 @@ public class DevelopmentService {
         }
 
         // 设置基础信息
-        development.setStudentId(CommonMethod.getInteger(form, "studentId"));
-        development.setStudentName(CommonMethod.getString(form, "studentName"));
+        Integer studentId = CommonMethod.getInteger(form, "studentId");
+        String studentName = CommonMethod.getString(form, "studentName");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentStudentId = CommonMethod.getPersonId();
+            if (currentStudentId == null) {
+                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+            }
+            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
+            if (sop.isEmpty() || sop.get().getPerson() == null) {
+                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
+            }
+            studentId = currentStudentId;
+            studentName = sop.get().getPerson().getName();
+        }
+        development.setStudentId(studentId);
+        development.setStudentName(studentName);
         development.setTitle(CommonMethod.getString(form, "title"));
         development.setDescription(CommonMethod.getString(form, "description"));
         development.setDevelopmentType(developmentType);
@@ -107,6 +129,9 @@ public class DevelopmentService {
         String status = dataRequest.getString("status");
         String developmentType = dataRequest.getString("developmentType");
         Integer studentId = dataRequest.getInteger("studentId");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            studentId = CommonMethod.getPersonId();
+        }
 
         List<StudentDevelopment> developmentList;
 
@@ -130,6 +155,16 @@ public class DevelopmentService {
                     .filter(d -> d.getTitle() != null && d.getTitle().contains(searchTitle))
                     .toList();
         }
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            if (allowedStudentIds.isEmpty()) {
+                developmentList = new ArrayList<>();
+            } else {
+                developmentList = developmentList.stream()
+                        .filter(d -> d.getStudentId() != null && allowedStudentIds.contains(d.getStudentId()))
+                        .toList();
+            }
+        }
 
         List<Map<String, Object>> dataList = new ArrayList<>();
         for (StudentDevelopment development : developmentList) {
@@ -147,38 +182,61 @@ public class DevelopmentService {
         String status = dataRequest.getString("status");
         String developmentType = dataRequest.getString("developmentType");
         Integer cPage = dataRequest.getCurrentPage();
+        int pageIndex = cPage != null ? cPage : 0;
         int size = 20;
         int dataTotal = 0;
         List<Map<String, Object>> dataList = new ArrayList<>();
-
-        Pageable pageable = PageRequest.of(cPage != null ? cPage : 0, size);
-        Page<StudentDevelopment> page;
-
-        if (developmentType != null && !developmentType.isEmpty()) {
-            page = developmentRepository.findByDevelopmentType(developmentType, pageable);
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            List<StudentDevelopment> filteredList;
+            if (allowedStudentIds.isEmpty()) {
+                filteredList = new ArrayList<>();
+            } else {
+                filteredList = developmentRepository.findAll().stream()
+                        .filter(d -> d.getStudentId() != null && allowedStudentIds.contains(d.getStudentId()))
+                        .filter(d -> developmentType == null || developmentType.isEmpty()
+                                || developmentType.equals(d.getDevelopmentType()))
+                        .filter(d -> title == null || title.isEmpty()
+                                || (d.getTitle() != null && d.getTitle().contains(title)))
+                        .filter(d -> status == null || status.isEmpty()
+                                || status.equals(d.getStatus()))
+                        .toList();
+            }
+            dataTotal = filteredList.size();
+            int fromIndex = Math.min(pageIndex * size, dataTotal);
+            int toIndex = Math.min(fromIndex + size, dataTotal);
+            for (StudentDevelopment development : filteredList.subList(fromIndex, toIndex)) {
+                dataList.add(getMapFromDevelopment(development));
+            }
         } else {
-            page = developmentRepository.findAll(pageable);
-        }
+            Pageable pageable = PageRequest.of(pageIndex, size);
+            Page<StudentDevelopment> page;
 
-        if (page != null) {
-            dataTotal = (int) page.getTotalElements();
-            List<StudentDevelopment> list = page.getContent();
+            if (developmentType != null && !developmentType.isEmpty()) {
+                page = developmentRepository.findByDevelopmentType(developmentType, pageable);
+            } else {
+                page = developmentRepository.findAll(pageable);
+            }
+            if (page != null) {
+                dataTotal = (int) page.getTotalElements();
+                List<StudentDevelopment> list = page.getContent();
 
-            for (StudentDevelopment development : list) {
-                boolean match = true;
-                if (title != null && !title.isEmpty()) {
-                    if (development.getTitle() == null || !development.getTitle().contains(title)) {
-                        match = false;
+                for (StudentDevelopment development : list) {
+                    boolean match = true;
+                    if (title != null && !title.isEmpty()) {
+                        if (development.getTitle() == null || !development.getTitle().contains(title)) {
+                            match = false;
+                        }
                     }
-                }
-                if (status != null && !status.isEmpty()) {
-                    if (!status.equals(development.getStatus())) {
-                        match = false;
+                    if (status != null && !status.isEmpty()) {
+                        if (!status.equals(development.getStatus())) {
+                            match = false;
+                        }
                     }
-                }
 
-                if (match) {
-                    dataList.add(getMapFromDevelopment(development));
+                    if (match) {
+                        dataList.add(getMapFromDevelopment(development));
+                    }
                 }
             }
         }
@@ -225,6 +283,10 @@ public class DevelopmentService {
         }
 
         StudentDevelopment development = op.get();
+        if (teacherDataScopeService.isCurrentRoleTeacher()
+                && !teacherDataScopeService.canCurrentTeacherAccessStudent(development.getStudentId())) {
+            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+        }
         String currentStatus = development.getStatus();
 
         // 状态机校验

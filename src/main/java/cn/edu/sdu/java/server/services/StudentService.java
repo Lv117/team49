@@ -138,6 +138,50 @@ public class StudentService {
         return CommonMethod.getReturnData(getMapFromStudent(s)); //这里回传包含学生信息的Map对象
     }
 
+    public DataResponse getStudentByIds(DataRequest dataRequest) {
+        List<?> ids = dataRequest.getList("ids");
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        if (ids == null || ids.isEmpty()) {
+            return CommonMethod.getReturnData(dataList);
+        }
+        Set<Integer> personIdSet = new LinkedHashSet<>();
+        for (Object idObj : ids) {
+            if (idObj == null) {
+                continue;
+            }
+            Integer personId;
+            if (idObj instanceof Number) {
+                personId = ((Number) idObj).intValue();
+            } else {
+                try {
+                    personId = (int) Double.parseDouble(idObj.toString());
+                } catch (Exception e) {
+                    personId = null;
+                }
+            }
+            if (personId != null && personId > 0) {
+                personIdSet.add(personId);
+            }
+        }
+        if (personIdSet.isEmpty()) {
+            return CommonMethod.getReturnData(dataList);
+        }
+        for (Integer personId : personIdSet) {
+            Optional<Student> op = studentRepository.findById(personId);
+            if (op.isEmpty() || op.get().getPerson() == null) {
+                continue;
+            }
+            Student s = op.get();
+            Person p = s.getPerson();
+            Map<String, Object> m = new HashMap<>();
+            m.put("personId", s.getPersonId());
+            m.put("num", p.getNum());
+            m.put("name", p.getName());
+            dataList.add(m);
+        }
+        return CommonMethod.getReturnData(dataList);
+    }
+
     public DataResponse studentEditSave(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         Map<String,Object> form = dataRequest.getMap("form"); //参数获取Map对象

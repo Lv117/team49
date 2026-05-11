@@ -33,15 +33,17 @@ public class AuthService {
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final StudentRepository studentRepository;
+    private final TeacherRepository teacherRepository;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final PasswordEncoder encoder;
 
-    public AuthService(PersonRepository personRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, StudentRepository studentRepository,AuthenticationManager authenticationManager, JwtService jwtService, PasswordEncoder encoder, ResourceLoader resourceLoader) {
+    public AuthService(PersonRepository personRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, StudentRepository studentRepository, TeacherRepository teacherRepository, AuthenticationManager authenticationManager, JwtService jwtService, PasswordEncoder encoder, ResourceLoader resourceLoader) {
         this.personRepository = personRepository;
         this.userRepository = userRepository;
         this.userTypeRepository = userTypeRepository;
         this.studentRepository = studentRepository;
+        this.teacherRepository = teacherRepository;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.encoder = encoder;
@@ -150,7 +152,13 @@ public class AuthService {
         if("STUDENT".equals(role)) {
             Student s = new Student();   // 创建实体对象
             s.setPerson(p);
+            s.setPersonId(p.getPersonId());
             studentRepository.saveAndFlush(s);  //插入新的Student记录
+        } else if("TEACHER".equals(role)) {
+            Teacher t = new Teacher();
+            t.setPerson(p);
+            t.setPersonId(p.getPersonId());
+            teacherRepository.saveAndFlush(t);
         }
         return CommonMethod.getReturnData(LoginControlUtil.getInstance().getValidateCodeDataMap());
     }

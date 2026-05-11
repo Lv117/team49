@@ -3,23 +3,36 @@ package cn.edu.sdu.java.server.repositorys;
 import cn.edu.sdu.java.server.models.Fee;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-/*
- * Fee 数据操作接口，主要实现Person数据的查询操作
- * Integer getMaxId()  Fee 表中的最大的fee_id;    JPQL 注解
- * Optional<Fee> findByPersonIdAndDay(Integer personId, String day);  根据student_id 和day 查询获得Option<Fee>对象,  命名规范
- * List<Fee> findListByStudent(Integer personId);  查询学生（person_id）所有的消费记录  JPQL 注解
+
+/**
+ * Fee 消费数据操作接口
  */
-public interface FeeRepository extends JpaRepository<Fee,Integer> {
-
+@Repository
+public interface FeeRepository extends JpaRepository<Fee, Integer> {
+    
+    @Query(value = "from Fee where student.personId = :personId order by createTime desc")
+    List<Fee> findListByStudent(@Param("personId") Integer personId);
+    
+    @Query(value = "from Fee where (?1=0 or student.personId=?1) and (?2 is null or consumptionType=?2) and (?3 is null or day like %?3%)")
+    List<Fee> findByConditions(@Param("personId") Integer personId, @Param("consumptionType") String consumptionType, @Param("keyword") String keyword);
+    
+    /**
+     * 查询学生指定月份的消费记录
+     */
+    @Query(value = "from Fee where student.personId = :personId and consumptionType = :consumptionType and day >= :startDate and day <= :endDate order by day asc")
+    List<Fee> findByStudentAndTypeAndDateRange(@Param("personId") Integer personId, 
+                                                @Param("consumptionType") String consumptionType,
+                                                @Param("startDate") String startDate,
+                                                @Param("endDate") String endDate);
+    
+    /**
+     * 根据学生ID和日期查询消费记录(旧版方法,保持向后兼容)
+     */
+    @Query(value = "from Fee where student.personId = ?1 and day = ?2")
     Optional<Fee> findByStudentPersonIdAndDay(Integer personId, String day);
-
-    @Query(value= "from Fee where student.personId=?1 order by day")
-    List<Fee> findListByStudent(Integer personId);
-
-    @Query(value = "select sum(money) from Fee where student.personId=?1 and day like ?2%")
-    Double getMoneyByPersonIdAndDate(Integer personId,String date);
-
 }

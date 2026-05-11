@@ -12,7 +12,11 @@ import cn.edu.sdu.java.server.repositorys.SystemInfoRepository;
 import cn.edu.sdu.java.server.util.ComDataUtil;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import cn.edu.sdu.java.server.util.DateTimeTool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -21,6 +25,7 @@ import java.util.*;
  */
 @Service
 public class SystemService {
+    private static final Logger log = LoggerFactory.getLogger(SystemService.class);
     private final DictionaryInfoRepository dictionaryInfoRepository; //数据数据操作自动注入
     private final SystemInfoRepository systemInfoRepository; //数据数据操作自动注入
     private final MenuInfoRepository menuInfoRepository;
@@ -85,6 +90,9 @@ public class SystemService {
         
         // Remove old innovation-panel to prevent duplicates
         menuInfoRepository.findByName("innovation-panel").ifPresent(m -> menuInfoRepository.delete(m));
+
+        // 管理员专属教师管理入口
+        ensureMenuLeaf("teacher", "教师管理", "1");
     }
 
     private MenuInfo ensureMenu(String name, String title, String userTypeIds, Integer pid) {
@@ -216,25 +224,36 @@ public class SystemService {
             }
         }
     }
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void modifyLog(Object o, boolean isCreate) {
-        String info = CommonMethod.ObjectToJSon(o);
-        if(info == null)
-            return;
-        String tableName = o.getClass().getName();
-        int index = tableName.lastIndexOf('.');
-        if(index > 0) {
-            tableName = tableName.substring(index+1);
+        try {
+            String info = CommonMethod.ObjectToJSon(o);
+            if (info == null)
+                return;
+            String tableName = o.getClass().getName();
+            int index = tableName.lastIndexOf('.');
+            if (index > 0) {
+                tableName = tableName.substring(index + 1);
+            }
+            if (tableName.length() > 20) {
+                tableName = tableName.substring(0, 20);
+            }
+            if (info.length() > 2000) {
+                info = info.substring(0, 2000);
+            }
+            ModifyLog l = new ModifyLog();
+            l.setTableName(tableName);
+            if (isCreate)
+                l.setType("0");
+            else
+                l.setType("1");
+            l.setInfo(info);
+            l.setOperateTime(DateTimeTool.parseDateTime(new Date()));
+            l.setOperatorId(CommonMethod.getPersonId());
+            modifyLogRepository.saveAndFlush(l);
+        } catch (Exception e) {
+            log.warn("保存业务修改日志失败，不影响主流程: {}", e.getMessage(), e);
         }
-        ModifyLog l = new ModifyLog();
-        l.setTableName(tableName);
-        if(isCreate)
-            l.setType("0");
-        else
-            l.setType("1");
-        l.setInfo(info);
-        l.setOperateTime(DateTimeTool.parseDateTime(new Date()));
-        l.setOperatorId(CommonMethod.getPersonId());
-        modifyLogRepository.save(l);
     }
 }
 

@@ -20,4 +20,7 @@ public interface ExamScheduleRepository extends JpaRepository<ExamSchedule, Stri
             @Param("courseName") String courseName,
             @Param("keyword") String keyword
     );
+
+    @Query("SELECT DISTINCT e.courseId FROM ExamSchedule e WHERE e.courseId IS NOT NULL AND (e.teacher = :teacherName OR e.teacher LIKE %:teacherName%)")
+    List<Integer> findDistinctCourseIdsByTeacherName(@Param("teacherName") String teacherName);
 }

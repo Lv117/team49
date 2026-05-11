@@ -2,10 +2,12 @@ package cn.edu.sdu.java.server.services;
 
 import cn.edu.sdu.java.server.models.DailyActivity;
 import cn.edu.sdu.java.server.models.Honor;
+import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.DailyActivityRepository;
 import cn.edu.sdu.java.server.repositorys.HonorRepository;
+import cn.edu.sdu.java.server.repositorys.StudentRepository;
 import cn.edu.sdu.java.server.util.ApprovalStateMachine;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.springframework.data.domain.Page;
@@ -23,14 +25,20 @@ public class HonorActivityService {
     private final HonorRepository honorRepository;
     private final DailyActivityRepository dailyActivityRepository;
     private final ApprovalRecordRepository approvalRecordRepository;  // 添加这行
+    private final StudentRepository studentRepository;
+    private final TeacherDataScopeService teacherDataScopeService;
 
     // 修改构造函数
     public HonorActivityService(HonorRepository honorRepository,
                                 DailyActivityRepository dailyActivityRepository,
-                                ApprovalRecordRepository approvalRecordRepository) {  // 添加这个参数
+                                ApprovalRecordRepository approvalRecordRepository,
+                                StudentRepository studentRepository,
+                                TeacherDataScopeService teacherDataScopeService) {  // 添加这个参数
         this.honorRepository = honorRepository;
         this.dailyActivityRepository = dailyActivityRepository;
         this.approvalRecordRepository = approvalRecordRepository;  // 添加这行赋值
+        this.studentRepository = studentRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
     }
 
 
@@ -43,6 +51,9 @@ public class HonorActivityService {
         String honorName = dataRequest.getString("honorName");
         String status = dataRequest.getString("status");
         Integer studentId = dataRequest.getInteger("studentId");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            studentId = CommonMethod.getPersonId();
+        }
         
         List<Honor> honorList;
         
@@ -61,6 +72,16 @@ public class HonorActivityService {
                     .filter(h -> h.getHonorName().contains(searchName))
                     .toList();
         }
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            if (allowedStudentIds.isEmpty()) {
+                honorList = new ArrayList<>();
+            } else {
+                honorList = honorList.stream()
+                        .filter(h -> h.getStudentId() != null && allowedStudentIds.contains(h.getStudentId()))
+                        .toList();
+            }
+        }
         
         List<Map<String, Object>> dataList = new ArrayList<>();
         for (Honor honor : honorList) {
@@ -77,32 +98,53 @@ public class HonorActivityService {
         String honorName = dataRequest.getString("honorName");
         String status = dataRequest.getString("status");
         Integer cPage = dataRequest.getCurrentPage();
+        int pageIndex = cPage != null ? cPage : 0;
         int size = 20;
         int dataTotal = 0;
         List<Map<String, Object>> dataList = new ArrayList<>();
-        
-        Pageable pageable = PageRequest.of(cPage != null ? cPage : 0, size);
-        Page<Honor> page = honorRepository.findAll(pageable);
-        
-        if (page != null) {
-            dataTotal = (int) page.getTotalElements();
-            List<Honor> list = page.getContent();
-            
-            for (Honor honor : list) {
-                boolean match = true;
-                if (honorName != null && !honorName.isEmpty()) {
-                    if (!honor.getHonorName().contains(honorName)) {
-                        match = false;
+
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            List<Honor> filteredList;
+            if (allowedStudentIds.isEmpty()) {
+                filteredList = new ArrayList<>();
+            } else {
+                filteredList = honorRepository.findAll().stream()
+                        .filter(h -> h.getStudentId() != null && allowedStudentIds.contains(h.getStudentId()))
+                        .filter(h -> honorName == null || honorName.isEmpty()
+                                || (h.getHonorName() != null && h.getHonorName().contains(honorName)))
+                        .filter(h -> status == null || status.isEmpty() || status.equals(h.getStatus()))
+                        .toList();
+            }
+            dataTotal = filteredList.size();
+            int fromIndex = Math.min(pageIndex * size, dataTotal);
+            int toIndex = Math.min(fromIndex + size, dataTotal);
+            for (Honor honor : filteredList.subList(fromIndex, toIndex)) {
+                dataList.add(getMapFromHonor(honor));
+            }
+        } else {
+            Pageable pageable = PageRequest.of(pageIndex, size);
+            Page<Honor> page = honorRepository.findAll(pageable);
+            if (page != null) {
+                dataTotal = (int) page.getTotalElements();
+                List<Honor> list = page.getContent();
+
+                for (Honor honor : list) {
+                    boolean match = true;
+                    if (honorName != null && !honorName.isEmpty()) {
+                        if (!honor.getHonorName().contains(honorName)) {
+                            match = false;
+                        }
                     }
-                }
-                if (status != null && !status.isEmpty()) {
-                    if (!status.equals(honor.getStatus())) {
-                        match = false;
+                    if (status != null && !status.isEmpty()) {
+                        if (!status.equals(honor.getStatus())) {
+                            match = false;
+                        }
                     }
-                }
-                
-                if (match) {
-                    dataList.add(getMapFromHonor(honor));
+
+                    if (match) {
+                        dataList.add(getMapFromHonor(honor));
+                    }
                 }
             }
         }
@@ -127,6 +169,19 @@ public class HonorActivityService {
             honorId = CommonMethod.getInteger(form, "id");
         }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
+        String studentName = CommonMethod.getString(form, "studentName");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentStudentId = CommonMethod.getPersonId();
+            if (currentStudentId == null) {
+                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+            }
+            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
+            if (sop.isEmpty() || sop.get().getPerson() == null) {
+                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
+            }
+            studentId = currentStudentId;
+            studentName = sop.get().getPerson().getName();
+        }
         
         Honor honor = null;
         
@@ -144,7 +199,7 @@ public class HonorActivityService {
         }
         
         honor.setStudentId(studentId);
-        honor.setStudentName(CommonMethod.getString(form, "studentName"));
+        honor.setStudentName(studentName);
         honor.setHonorName(CommonMethod.getString(form, "honorName"));
         honor.setHonorLevel(CommonMethod.getString(form, "honorLevel"));
         
@@ -206,6 +261,10 @@ public class HonorActivityService {
         }
     
         Honor honor = op.get();
+        if (teacherDataScopeService.isCurrentRoleTeacher()
+                && !teacherDataScopeService.canCurrentTeacherAccessStudent(honor.getStudentId())) {
+            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+        }
         String currentStatus = honor.getStatus();
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
             return CommonMethod.getReturnMessageError(
@@ -240,9 +299,13 @@ public class HonorActivityService {
         String activityName = dataRequest.getString("activityName");
         String status = dataRequest.getString("status");
         Integer studentId = dataRequest.getInteger("studentId");
-        
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            studentId = CommonMethod.getPersonId();
+        }
+        String activityType = dataRequest.getString("activityType");
+
         List<DailyActivity> activityList;
-        
+
         if (studentId != null) {
             activityList = dailyActivityRepository.findByStudentId(studentId);
         } else if (status != null && !status.isEmpty()) {
@@ -250,20 +313,38 @@ public class HonorActivityService {
         } else {
             activityList = dailyActivityRepository.findAll();
         }
-        
-        // 过滤活动名称
+
+        // 按活动类型过滤
+        if (activityType != null && !activityType.isEmpty()) {
+            final String typeFilter = activityType;
+            activityList = activityList.stream()
+                    .filter(a -> typeFilter.equals(a.getActivityType()))
+                    .toList();
+        }
+
+        // 按活动名称过滤
         if (activityName != null && !activityName.isEmpty()) {
             final String searchName = activityName;
             activityList = activityList.stream()
                     .filter(a -> a.getActivityName().contains(searchName))
                     .toList();
         }
-        
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            if (allowedStudentIds.isEmpty()) {
+                activityList = new ArrayList<>();
+            } else {
+                activityList = activityList.stream()
+                        .filter(a -> a.getStudentId() != null && allowedStudentIds.contains(a.getStudentId()))
+                        .toList();
+            }
+        }
+
         List<Map<String, Object>> dataList = new ArrayList<>();
         for (DailyActivity activity : activityList) {
             dataList.add(getMapFromActivity(activity));
         }
-        
+
         return CommonMethod.getReturnData(dataList);
     }
 
@@ -274,32 +355,53 @@ public class HonorActivityService {
         String activityName = dataRequest.getString("activityName");
         String status = dataRequest.getString("status");
         Integer cPage = dataRequest.getCurrentPage();
+        int pageIndex = cPage != null ? cPage : 0;
         int size = 20;
         int dataTotal = 0;
         List<Map<String, Object>> dataList = new ArrayList<>();
-        
-        Pageable pageable = PageRequest.of(cPage != null ? cPage : 0, size);
-        Page<DailyActivity> page = dailyActivityRepository.findAll(pageable);
-        
-        if (page != null) {
-            dataTotal = (int) page.getTotalElements();
-            List<DailyActivity> list = page.getContent();
-            
-            for (DailyActivity activity : list) {
-                boolean match = true;
-                if (activityName != null && !activityName.isEmpty()) {
-                    if (!activity.getActivityName().contains(activityName)) {
-                        match = false;
+
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            List<DailyActivity> filteredList;
+            if (allowedStudentIds.isEmpty()) {
+                filteredList = new ArrayList<>();
+            } else {
+                filteredList = dailyActivityRepository.findAll().stream()
+                        .filter(a -> a.getStudentId() != null && allowedStudentIds.contains(a.getStudentId()))
+                        .filter(a -> activityName == null || activityName.isEmpty()
+                                || (a.getActivityName() != null && a.getActivityName().contains(activityName)))
+                        .filter(a -> status == null || status.isEmpty() || status.equals(a.getStatus()))
+                        .toList();
+            }
+            dataTotal = filteredList.size();
+            int fromIndex = Math.min(pageIndex * size, dataTotal);
+            int toIndex = Math.min(fromIndex + size, dataTotal);
+            for (DailyActivity activity : filteredList.subList(fromIndex, toIndex)) {
+                dataList.add(getMapFromActivity(activity));
+            }
+        } else {
+            Pageable pageable = PageRequest.of(pageIndex, size);
+            Page<DailyActivity> page = dailyActivityRepository.findAll(pageable);
+            if (page != null) {
+                dataTotal = (int) page.getTotalElements();
+                List<DailyActivity> list = page.getContent();
+
+                for (DailyActivity activity : list) {
+                    boolean match = true;
+                    if (activityName != null && !activityName.isEmpty()) {
+                        if (!activity.getActivityName().contains(activityName)) {
+                            match = false;
+                        }
                     }
-                }
-                if (status != null && !status.isEmpty()) {
-                    if (!status.equals(activity.getStatus())) {
-                        match = false;
+                    if (status != null && !status.isEmpty()) {
+                        if (!status.equals(activity.getStatus())) {
+                            match = false;
+                        }
                     }
-                }
-                
-                if (match) {
-                    dataList.add(getMapFromActivity(activity));
+
+                    if (match) {
+                        dataList.add(getMapFromActivity(activity));
+                    }
                 }
             }
         }
@@ -318,6 +420,19 @@ public class HonorActivityService {
         Map<String, Object> form = dataRequest.getMap("form");
         Integer activityId = CommonMethod.getInteger(form, "activityId");
         Integer studentId = CommonMethod.getInteger(form, "studentId");
+        String studentName = CommonMethod.getString(form, "studentName");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentStudentId = CommonMethod.getPersonId();
+            if (currentStudentId == null) {
+                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+            }
+            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
+            if (sop.isEmpty() || sop.get().getPerson() == null) {
+                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
+            }
+            studentId = currentStudentId;
+            studentName = sop.get().getPerson().getName();
+        }
         
         DailyActivity activity = null;
         
@@ -335,7 +450,7 @@ public class HonorActivityService {
         }
         
         activity.setStudentId(studentId);
-        activity.setStudentName(CommonMethod.getString(form, "studentName"));
+        activity.setStudentName(studentName);
         activity.setActivityName(CommonMethod.getString(form, "activityName"));
         activity.setActivityType(CommonMethod.getString(form, "activityType"));
         
@@ -393,6 +508,10 @@ public class HonorActivityService {
         }
 
         DailyActivity activity = op.get();
+        if (teacherDataScopeService.isCurrentRoleTeacher()
+                && !teacherDataScopeService.canCurrentTeacherAccessStudent(activity.getStudentId())) {
+            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+        }
         String currentStatus = activity.getStatus();
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
             return CommonMethod.getReturnMessageError(
