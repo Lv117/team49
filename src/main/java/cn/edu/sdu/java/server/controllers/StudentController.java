@@ -71,6 +71,7 @@ public class StudentController {
      */
 
     @PostMapping("/studentDelete")
+    @PreAuthorize("hasRole('ADMIN')")
     public DataResponse studentDelete(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.studentDelete(dataRequest);
     }

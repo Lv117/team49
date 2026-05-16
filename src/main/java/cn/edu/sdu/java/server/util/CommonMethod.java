@@ -29,6 +29,9 @@ public class CommonMethod {
     public static DataResponse getReturnMessage(Integer code, String msg){
         return new   DataResponse(code,null,msg);
     }
+    public static DataResponse getReturnMessage(Integer code, String msg, String errorCode){
+        return new DataResponse(code, null, msg, errorCode);
+    }
     public static  DataResponse getReturnData(Object obj){
         return getReturnData(obj,null);
     }
@@ -40,6 +43,9 @@ public class CommonMethod {
     }
     public static DataResponse getReturnMessageError(String msg){
         return getReturnMessage(1, msg);
+    }
+    public static DataResponse getReturnMessageError(String msg, String errorCode){
+        return getReturnMessage(1, msg, errorCode);
     }
 
     /**

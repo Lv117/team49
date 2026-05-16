@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.*;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
@@ -7,6 +9,7 @@ import cn.edu.sdu.java.server.repositorys.*;
 import cn.edu.sdu.java.server.util.ComDataUtil;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import cn.edu.sdu.java.server.util.DateTimeTool;
+import jakarta.validation.ConstraintViolationException;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.*;
@@ -16,8 +19,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionSystemException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -105,23 +114,26 @@ public class StudentService {
 
 
 
+    @Transactional(rollbackFor = Exception.class)
     public DataResponse studentDelete(DataRequest dataRequest) {
-        Integer personId = dataRequest.getInteger("personId");  //获取student_id值
-        Student s = null;
-        Optional<Student> op;
-        if (personId != null && personId > 0) {
-            op = studentRepository.findById(personId);   //查询获得实体对象
-            if(op.isPresent()) {
-                s = op.get();
-                Optional<User> uOp = userRepository.findById(personId); //查询对应该学生的账户
-                //删除对应该学生的账户
-                uOp.ifPresent(userRepository::delete);
-                Person p = s.getPerson();
-                studentRepository.delete(s);    //首先数据库永久删除学生信息
-                personRepository.delete(p);   // 然后数据库永久删除学生信息
-            }
+        Integer personId = dataRequest.getInteger("personId");
+        if (personId == null || personId <= 0) {
+            return CommonMethod.getReturnMessageError("personId不能为空");
         }
-        return CommonMethod.getReturnMessageOK();  //通知前端操作正常
+        Optional<Student> op = studentRepository.findById(personId);
+        if (op.isEmpty()) {
+            return CommonMethod.getReturnMessageError("学生不存在");
+        }
+        Student s = op.get();
+        Person p = s.getPerson();
+        if (p == null) {
+            return CommonMethod.getReturnMessageError("人员信息不存在");
+        }
+        // 删除顺序：先删 student → 再删 user → 最后删 person
+        studentRepository.delete(s);
+        userRepository.findById(personId).ifPresent(userRepository::delete);
+        personRepository.delete(p);
+        return CommonMethod.getReturnMessageOK();
     }
 
 
@@ -182,10 +194,97 @@ public class StudentService {
         return CommonMethod.getReturnData(dataList);
     }
 
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void populatePerson(Person p, Map<String, Object> form, String num) {
+        p.setNum(num);
+        p.setName(normalizeText(CommonMethod.getString(form, "name")));
+        p.setDept(normalizeText(CommonMethod.getString(form, "dept")));
+        p.setCard(normalizeText(CommonMethod.getString(form, "card")));
+        p.setGender(normalizeText(CommonMethod.getString(form, "gender")));
+        p.setBirthday(normalizeText(CommonMethod.getString(form, "birthday")));
+        p.setEmail(normalizeText(CommonMethod.getString(form, "email")));
+        p.setPhone(normalizeText(CommonMethod.getString(form, "phone")));
+        p.setAddress(normalizeText(CommonMethod.getString(form, "address")));
+    }
+
+    private void populateStudent(Student s, Map<String, Object> form) {
+        s.setMajor(normalizeText(CommonMethod.getString(form, "major")));
+        s.setClassName(normalizeText(CommonMethod.getString(form, "className")));
+    }
+
+    private boolean isStudentNumConflict(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null) {
+                String lowerMessage = message.toLowerCase(Locale.ROOT);
+                if (lowerMessage.contains("duplicate entry")
+                        || lowerMessage.contains("unique")
+                        || lowerMessage.contains("constraint")) {
+                    if (lowerMessage.contains("num")
+                            || lowerMessage.contains("username")
+                            || lowerMessage.contains("user_name")) {
+                        return true;
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String extractValidationMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                if (message.contains("Validation failed for classes")) {
+                    return "学生信息校验未通过，请检查邮箱、学号等字段格式";
+                }
+                if (message.contains("ConstraintViolationImpl{interpolatedMessage='")) {
+                    int start = message.indexOf("ConstraintViolationImpl{interpolatedMessage='");
+                    if (start >= 0) {
+                        start += "ConstraintViolationImpl{interpolatedMessage='".length();
+                        int end = message.indexOf("'", start);
+                        if (end > start) {
+                            return "学生信息校验未通过：" + message.substring(start, end);
+                        }
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+        return "学生信息校验未通过，请检查输入内容";
+    }
+
+    private void rethrowStudentSaveException(Exception e) {
+        if (e instanceof DataIntegrityViolationException && isStudentNumConflict(e)) {
+            throw new BusinessException(ErrorCodes.STUDENT_NUM_CONFLICT, "学号已被占用，请使用其他学号", e);
+        }
+        if (e instanceof TransactionSystemException || e instanceof ConstraintViolationException) {
+            throw new BusinessException(ErrorCodes.STUDENT_VALIDATION_ERROR, extractValidationMessage(e), e);
+        }
+        if (e instanceof CannotAcquireLockException || e instanceof PessimisticLockingFailureException) {
+            throw new BusinessException(ErrorCodes.STUDENT_SAVE_TIMEOUT, "数据库写入超时，请稍后重试", e);
+        }
+        if (e instanceof DataAccessException) {
+            throw new BusinessException(ErrorCodes.STUDENT_SAVE_DB_ERROR, "学生信息写入失败，请稍后重试", e);
+        }
+        throw new BusinessException(ErrorCodes.STUDENT_SAVE_DB_ERROR, "学生信息写入失败，请稍后重试", e);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public DataResponse studentEditSave(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         Map<String,Object> form = dataRequest.getMap("form"); //参数获取Map对象
-        String num = CommonMethod.getString(form, "num");  //Map 获取属性的值
+        String num = normalizeText(CommonMethod.getString(form, "num"));  //Map 获取属性的值
         Student s = null;
         Person p;
         User u;
@@ -197,56 +296,85 @@ public class StudentService {
                 s = op.get();
             }
         }
+        if (num == null) {
+            return CommonMethod.getReturnMessageError("学号不能为空", ErrorCodes.STUDENT_NUM_REQUIRED);
+        }
         Optional<Person> nOp = personRepository.findByNum(num); //查询是否存在num的人员
-        if (nOp.isPresent()) {
-            if (s == null || !s.getPerson().getNum().equals(num)) {
-                return CommonMethod.getReturnMessageError("新学号已经存在，不能添加或修改！");
+        Person existingPersonByNum = nOp.orElse(null);
+        if (existingPersonByNum != null) {
+            boolean sameStudent = s != null && Objects.equals(existingPersonByNum.getPersonId(), s.getPersonId());
+            boolean existingStudentRecord = studentRepository.findById(existingPersonByNum.getPersonId()).isPresent();
+            if (!sameStudent && existingStudentRecord) {
+                return CommonMethod.getReturnMessageError("学号已被占用，请使用其他学号", ErrorCodes.STUDENT_NUM_CONFLICT);
             }
         }
-        if (s == null) {
-            p = new Person();
-            p.setNum(num);
-            p.setType("1");
-            personRepository.saveAndFlush(p);  //插入新的Person记录
-            personId = p.getPersonId();
-            String password = encoder.encode("123456");
-            u = new User();
-            u.setPersonId(personId);
-            u.setUserName(num);
-            u.setPassword(password);
-            u.setUserType(userTypeRepository.findByName(EUserType.ROLE_STUDENT.name()));
-            u.setCreateTime(DateTimeTool.parseDateTime(new Date()));
-            u.setCreatorId(CommonMethod.getPersonId());
-            userRepository.saveAndFlush(u); //插入新的User记录
-            s = new Student();   // 创建实体对象
-            s.setPersonId(personId);
-            studentRepository.saveAndFlush(s);  //插入新的Student记录
-            isNew = true;
-        } else {
-            p = s.getPerson();
-        }
-        personId = p.getPersonId();
-        if (!num.equals(p.getNum())) {   //如果人员编号变化，修改人员编号和登录账号
-            Optional<User> uOp = userRepository.findByPersonPersonId(personId);
-            if (uOp.isPresent()) {
-                u = uOp.get();
+
+        try {
+            if (s == null) {
+                if (existingPersonByNum != null) {
+                    p = existingPersonByNum;
+                    log.warn("检测到学号 {} 对应的残留 Person 记录，自动补全缺失的学生档案，personId={}", num, p.getPersonId());
+                } else {
+                    p = new Person();
+                    p.setType("1");
+                }
+                populatePerson(p, form, num);
+                if (p.getType() == null) {
+                    p.setType("1");
+                }
+                personRepository.saveAndFlush(p);
+                personId = p.getPersonId();
+
+                UserType studentType = userTypeRepository.findByName(EUserType.ROLE_STUDENT.name());
+                if (studentType == null) {
+                    throw new BusinessException(ErrorCodes.STUDENT_USER_TYPE_MISSING, "学生角色配置缺失，请联系管理员");
+                }
+
+                Optional<User> uOp = userRepository.findByPersonPersonId(personId);
+                if (uOp.isPresent()) {
+                    u = uOp.get();
+                } else {
+                    u = new User();
+                    u.setPersonId(personId);
+                    u.setPassword(encoder.encode("123456"));
+                    u.setCreateTime(DateTimeTool.parseDateTime(new Date()));
+                    u.setCreatorId(CommonMethod.getPersonId());
+                }
                 u.setUserName(num);
+                u.setUserType(studentType);
                 userRepository.saveAndFlush(u);
+
+                Optional<Student> existingStudentOp = studentRepository.findById(personId);
+                if (existingStudentOp.isPresent()) {
+                    s = existingStudentOp.get();
+                } else {
+                    s = new Student();
+                    s.setPersonId(personId);
+                }
+                populateStudent(s, form);
+                studentRepository.saveAndFlush(s);
+                isNew = true;
+            } else {
+                p = s.getPerson();
+                personId = p.getPersonId();
+                populatePerson(p, form, num);
+                personRepository.saveAndFlush(p);  // 修改保存人员信息
+
+                Optional<User> uOp = userRepository.findByPersonPersonId(personId);
+                if (uOp.isPresent()) {
+                    u = uOp.get();
+                    u.setUserName(num);
+                    userRepository.saveAndFlush(u);
+                }
+
+                populateStudent(s, form);
+                studentRepository.saveAndFlush(s);  //修改保存学生信息
             }
-            p.setNum(num);  //设置属性
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            rethrowStudentSaveException(e);
         }
-        p.setName(CommonMethod.getString(form, "name"));
-        p.setDept(CommonMethod.getString(form, "dept"));
-        p.setCard(CommonMethod.getString(form, "card"));
-        p.setGender(CommonMethod.getString(form, "gender"));
-        p.setBirthday(CommonMethod.getString(form, "birthday"));
-        p.setEmail(CommonMethod.getString(form, "email"));
-        p.setPhone(CommonMethod.getString(form, "phone"));
-        p.setAddress(CommonMethod.getString(form, "address"));
-        personRepository.save(p);  // 修改保存人员信息
-        s.setMajor(CommonMethod.getString(form, "major"));
-        s.setClassName(CommonMethod.getString(form, "className"));
-        studentRepository.save(s);  //修改保存学生信息
         systemService.modifyLog(s,isNew);
         return CommonMethod.getReturnData(s.getPersonId());  // 将personId返回前端
     }

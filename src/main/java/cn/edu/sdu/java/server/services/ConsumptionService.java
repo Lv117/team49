@@ -40,11 +40,20 @@ public class ConsumptionService {
      */
     public DataResponse getConsumptionList(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
+        if (personId == null || personId <= 0) {
+            personId = dataRequest.getInteger("studentId");
+        }
         String consumptionType = dataRequest.getString("consumptionType");
         String keyword = dataRequest.getString("keyword");
+        String month = dataRequest.getString("month");
         
         if (personId == null) {
             personId = 0;
+        }
+        
+        // 如果传了 month 参数（如 "2026-05"），用月份前缀过滤
+        if (month != null && !month.isEmpty()) {
+            keyword = month;
         }
         
         List<Fee> feeList = feeRepository.findByConditions(personId, consumptionType, keyword);
@@ -61,17 +70,41 @@ public class ConsumptionService {
      * 保存消费记录
      */
     public DataResponse consumptionSave(DataRequest dataRequest) {
-        Map<String, Object> form = dataRequest.getData();
+        // 前端可能把参数放在 data 字段里，需要兼容两种情况
+        Map<String, Object> form = dataRequest.getMap("data");
+        if (form == null || form.isEmpty()) {
+            form = dataRequest.getData();
+        }
         if (form == null || form.isEmpty()) {
             form = dataRequest.getMap("form");
         }
         
+        // 支持前端字段映射: consumptionId -> feeId, consumptionDate -> day, amount -> money, remark -> description
         Integer feeId = CommonMethod.getInteger(form, "feeId");
+        if (feeId == null || feeId <= 0) {
+            feeId = CommonMethod.getInteger(form, "consumptionId");
+        }
+        
+        // 支持 studentId 和 personId 两种字段名
         Integer personId = CommonMethod.getInteger(form, "personId");
+        if (personId == null || personId <= 0) {
+            personId = CommonMethod.getInteger(form, "studentId");
+        }
         String consumptionType = CommonMethod.getString(form, "consumptionType");
         Double money = CommonMethod.getDouble(form, "money");
+        if (money == null || money <= 0) {
+            money = CommonMethod.getDouble(form, "amount");
+        }
+        
         String day = CommonMethod.getString(form, "day");
+        if (day == null || day.isEmpty()) {
+            day = CommonMethod.getString(form, "consumptionDate");
+        }
+        
         String description = CommonMethod.getString(form, "description");
+        if (description == null || description.isEmpty()) {
+            description = CommonMethod.getString(form, "remark");
+        }
         
         if (personId == null || personId <= 0) {
             return CommonMethod.getReturnMessageError("学生ID不能为空");
@@ -325,14 +358,19 @@ public class ConsumptionService {
      */
     private Map<String, Object> getMapFromFee(Fee fee) {
         Map<String, Object> map = new HashMap<>();
+        // 同时返回后端字段名和前端期望的字段名，确保兼容性
         map.put("feeId", fee.getFeeId());
+        map.put("consumptionId", fee.getFeeId()); // 前端期望的字段名
         map.put("personId", fee.getStudent() != null ? fee.getStudent().getPersonId() : null);
         map.put("studentName", fee.getStudent() != null && fee.getStudent().getPerson() != null ? fee.getStudent().getPerson().getName() : "");
         map.put("day", fee.getDay());
+        map.put("consumptionDate", fee.getDay()); // 前端期望的字段名
         map.put("money", fee.getMoney());
+        map.put("amount", fee.getMoney()); // 前端期望的字段名
         map.put("consumptionType", fee.getConsumptionType());
         map.put("consumptionTypeName", getConsumptionTypeName(fee.getConsumptionType()));
         map.put("description", fee.getDescription());
+        map.put("remark", fee.getDescription()); // 前端期望的字段名
         map.put("createTime", fee.getCreateTime());
         return map;
     }

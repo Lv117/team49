@@ -75,24 +75,55 @@ public class SystemService {
         ComDataUtil pi = ComDataUtil.getInstance();
         pi.setSystemMap(map);
         
-        // 创新创业板块菜单初始化
-        MenuInfo innovationMenu = ensureMenu("innovation", "创新创业", "1,2,3", null);
+        // userTypeIds: 1-ADMIN, 2-STUDENT, 3-TEACHER
+        final String ADMIN_ONLY = "1";
+        final String ADMIN_STUDENT = "1,2";
+        final String ALL_ROLES = "1,2,3";
+
+        // 创新创业板块：教师隐藏“学科竞赛”，保留“创业实践/科研成果”
+        MenuInfo innovationMenu = ensureMenu("innovation", "创新创业", ALL_ROLES, null);
         if (innovationMenu != null) {
-            ensureMenu("innovation-project", "创业实践", "1,2,3", innovationMenu.getId());
-            ensureMenu("competition", "学科竞赛", "1,2,3", innovationMenu.getId());
-            ensureMenu("achievement", "科研成果", "1,2,3", innovationMenu.getId());
+            ensureMenu("innovation-project", "创业实践", ALL_ROLES, innovationMenu.getId());
+            ensureMenu("competition", "学科竞赛", ADMIN_STUDENT, innovationMenu.getId());
+            ensureMenu("achievement", "科研成果", ALL_ROLES, innovationMenu.getId());
+        }
+
+        // 社会实践板块：教师整块隐藏
+        MenuInfo socialPracticeMenu = ensureMenu("social-practice", "社会实践", ADMIN_STUDENT, null);
+        if (socialPracticeMenu != null) {
+            ensureMenu("daily-activity", "日常活动", ADMIN_STUDENT, socialPracticeMenu.getId());
+            ensureMenu("daily-activity-training", "培训讲座", ADMIN_STUDENT, socialPracticeMenu.getId());
+            ensureMenu("daily-activity-internship", "校外实习", ADMIN_STUDENT, socialPracticeMenu.getId());
+            ensureMenu("daily-activity-volunteer", "志愿服务", ADMIN_STUDENT, socialPracticeMenu.getId());
         }
         
         // 清理旧的 innovation-practice 菜单
         menuInfoRepository.findByName("innovation-practice").ifPresent(m -> menuInfoRepository.delete(m));
         
-        ensureMenuLeaf("honor-panel", "荣誉奖励", "1,2,3");
+        ensureMenuLeaf("honor-panel", "荣誉奖励", ALL_ROLES);
         
         // Remove old innovation-panel to prevent duplicates
         menuInfoRepository.findByName("innovation-panel").ifPresent(m -> menuInfoRepository.delete(m));
 
         // 管理员专属教师管理入口
-        ensureMenuLeaf("teacher", "教师管理", "1");
+        ensureMenuLeaf("teacher", "教师管理", ADMIN_ONLY);
+        
+        // 教务管理板块（如果不存在则创建）
+        MenuInfo academicManagementMenu = ensureMenu("academic-management", "教务管理", ALL_ROLES, null);
+        
+        // 【强制清理】先删除所有"作业管理"菜单记录，再重新创建
+        List<MenuInfo> allHomeworkMenus = menuInfoRepository.findAll().stream()
+                .filter(m -> "homework-management".equals(m.getName()))
+                .collect(java.util.stream.Collectors.toList());
+        if (!allHomeworkMenus.isEmpty()) {
+            menuInfoRepository.deleteAll(allHomeworkMenus);
+            menuInfoRepository.flush();
+        }
+        
+        // 在教务管理下重新创建唯一的作业管理子菜单
+        if (academicManagementMenu != null) {
+            ensureMenu("homework-management", "作业管理", ALL_ROLES, academicManagementMenu.getId());
+        }
     }
 
     private MenuInfo ensureMenu(String name, String title, String userTypeIds, Integer pid) {

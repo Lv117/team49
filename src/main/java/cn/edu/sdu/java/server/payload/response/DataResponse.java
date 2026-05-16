@@ -15,6 +15,7 @@ public class DataResponse {
     private Integer code;
     private Object data;
     private String msg;
+    private String errorCode;
 
     public DataResponse(){
 
@@ -24,6 +25,13 @@ public class DataResponse {
         this.code = code;
         this.data = data;
         this.msg = msg;
+    }
+
+    public DataResponse(Integer code, Object data, String msg, String errorCode) {
+        this.code = code;
+        this.data = data;
+        this.msg = msg;
+        this.errorCode = errorCode;
     }
 
     public static DataResponse success(Object data) {
@@ -40,5 +48,9 @@ public class DataResponse {
 
     public static DataResponse error(String msg) {
         return new DataResponse(1, null, msg);
+    }
+
+    public static DataResponse error(String msg, String errorCode) {
+        return new DataResponse(1, null, msg, errorCode);
     }
 }

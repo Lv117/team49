@@ -10,6 +10,7 @@ import cn.edu.sdu.java.server.util.CommonMethod;
 import cn.edu.sdu.java.server.util.DateTimeTool;
 import cn.edu.sdu.java.server.util.LoginControlUtil;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,6 +28,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 public class AuthService {
     private final PersonRepository personRepository;
@@ -76,13 +78,8 @@ public class AuthService {
                 return CommonMethod.getReturnMessageError("登录失败：用户角色无效，不允许登录！");
             }
             
-            user.setLastLoginTime(DateTimeTool.parseDateTime(new Date()));
-            Integer count = user.getLoginCount();
-            if (count == null)
-                count = 1;
-            else count += 1;
-            user.setLoginCount(count);
-            userRepository.save(user);
+            // 切换账号和登录以认证成功为准，这里不再同步写 user 表，
+            // 避免登录统计更新被锁等待拖住整次登录流程。
         }
         
         String jwt = jwtService.generateToken(userDetails);

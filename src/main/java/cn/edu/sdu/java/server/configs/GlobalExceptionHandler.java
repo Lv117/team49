@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.configs;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -33,7 +35,7 @@ public class GlobalExceptionHandler {
             .collect(Collectors.joining("; "));
         
         log.error("参数校验失败：{}", errorMessage);
-        return DataResponse.error("参数校验失败：" + errorMessage);
+        return DataResponse.error("参数校验失败：" + errorMessage, ErrorCodes.VALIDATION_ERROR);
     }
 
     /**
@@ -47,7 +49,7 @@ public class GlobalExceptionHandler {
             .collect(Collectors.joining("; "));
         
         log.error("参数绑定失败：{}", errorMessage);
-        return DataResponse.error("参数绑定失败：" + errorMessage);
+        return DataResponse.error("参数绑定失败：" + errorMessage, ErrorCodes.VALIDATION_ERROR);
     }
 
     /**
@@ -57,7 +59,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public DataResponse handleBadCredentialsException(BadCredentialsException e) {
         log.error("认证失败：{}", e.getMessage());
-        return DataResponse.error("用户名或密码错误");
+        return DataResponse.error("用户名或密码错误", ErrorCodes.AUTH_FAILED);
     }
 
     /**
@@ -67,7 +69,17 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public DataResponse handleAccessDeniedException(AccessDeniedException e) {
         log.error("访问拒绝：{}", e.getMessage());
-        return DataResponse.error("没有访问权限");
+        return DataResponse.error("没有访问权限", ErrorCodes.ACCESS_DENIED);
+    }
+
+    /**
+     * 处理带错误码的业务异常
+     */
+    @ExceptionHandler(BusinessException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public DataResponse handleBusinessException(BusinessException e) {
+        log.error("业务异常[{}]：{}", e.getErrorCode(), e.getMessage(), e);
+        return DataResponse.error(e.getMessage(), e.getErrorCode());
     }
 
     /**
@@ -77,7 +89,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public DataResponse handleIllegalArgumentException(IllegalArgumentException e) {
         log.error("非法参数：{}", e.getMessage());
-        return DataResponse.error(e.getMessage());
+        return DataResponse.error(e.getMessage(), ErrorCodes.VALIDATION_ERROR);
     }
 
     /**
@@ -87,7 +99,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public DataResponse handleRuntimeException(RuntimeException e) {
         log.error("业务错误：{}", e.getMessage(), e);
-        return DataResponse.error("业务错误：" + e.getMessage());
+        return DataResponse.error("业务错误：" + e.getMessage(), ErrorCodes.SYSTEM_ERROR);
     }
 
     /**
@@ -97,6 +109,6 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public DataResponse handleException(Exception e) {
         log.error("系统异常：{}", e.getMessage(), e);
-        return DataResponse.error("系统错误：" + e.getMessage());
+        return DataResponse.error("系统错误：" + e.getMessage(), ErrorCodes.SYSTEM_ERROR);
     }
 }

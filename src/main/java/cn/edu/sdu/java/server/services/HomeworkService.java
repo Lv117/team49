@@ -204,10 +204,12 @@ public class HomeworkService {
                 m.put("homeworkId", s.getHomework().getHomeworkId());
                 m.put("homeworkTitle", s.getHomework().getTitle());
                 m.put("studentId", s.getStudent().getPersonId());
+                m.put("studentNum", s.getStudent().getPerson().getNum());
                 m.put("studentName", s.getStudent().getPerson().getName());
                 m.put("content", s.getContent());
                 m.put("attachmentUrl", s.getAttachmentUrl());
-                m.put("submitTime", s.getSubmitTime());
+                // 格式化提交时间，去除 T 和时间秒数
+                m.put("submitTime", s.getSubmitTime() != null ? s.getSubmitTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "");
                 m.put("score", s.getScore());
                 m.put("comment", s.getComment());
                 m.put("status", s.getStatus());
