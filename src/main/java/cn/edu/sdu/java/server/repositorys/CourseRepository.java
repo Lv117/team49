@@ -19,4 +19,10 @@ public interface CourseRepository extends JpaRepository<Course,Integer> {
 
     Optional<Course> findByNum(String num);
     List<Course> findByName(String name);
+    
+    @Query("SELECT c FROM Course c WHERE c.teacher.personId = :personId")
+    List<Course> findByTeacherPersonPersonId(Integer personId);
+    
+    @Query("SELECT c FROM Course c WHERE c.teacher.personId = :personId AND (:keyword = '' OR c.num LIKE %:keyword% OR c.name LIKE %:keyword%)")
+    List<Course> findByTeacherPersonIdAndKeyword(Integer personId, String keyword);
 }

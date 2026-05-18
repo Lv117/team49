@@ -31,11 +31,21 @@ public class Course  {
 
     @Size(max = 50)
     private String name;
-    private Integer credit;
+    private Double credit;
     @ManyToOne
     @JoinColumn(name="pre_course_id")
     private Course preCourse;
     @Size(max = 12)
     private String coursePath;
+
+    @ManyToOne
+    @JoinColumn(name="teacher_id")
+    private Teacher teacher;
+
+    @Size(max = 100)
+    private String classroom;
+
+    @Size(max = 100)
+    private String schedule;
 
 }

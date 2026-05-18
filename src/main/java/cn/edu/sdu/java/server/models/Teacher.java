@@ -14,10 +14,12 @@ import lombok.Setter;
         })
 public class Teacher {
     @Id
+    @Column(name = "person_id")
     private Integer personId;
 
     @OneToOne
-    @JoinColumn(name="personId")
+    @MapsId
+    @JoinColumn(name = "person_id")
     private Person person;
 
     @Size(max = 20)

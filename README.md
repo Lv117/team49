@@ -1,11 +1,289 @@
-1# team49 JavaProject
-# 5 人项目前中后期分工计划
+# 学生综合管理系统 - 后端服务
 
-**核心原则**：前后端分离开发、模块一一对应、工作量均等分配、统筹岗全程核心协调，贴合“基础框架先行→接口对接验证→高级功能优化”的开发逻辑，严格遵循老师指定的JavaFX+Spring Boot3+JPA技术栈，衔接原团队5大业务模块的高分设计。
+## 项目简介
 
-**人员划分**：后端2人（后1、后2）、前端2人（前1、前2）、统筹1人（统1），全程按阶段分配核心工作，无辅助岗/打杂岗。
+这是一个基于 Spring Boot 3 + JPA + MySQL 的学生综合管理系统后端服务，提供完整的 RESTful API 接口，支持学生管理、课程管理、考勤管理、作业管理、考试管理、成绩管理等多个业务模块。
 
-**整体周期建议**：6-9天（学生团队开发节奏，可根据实际学习进度微调）。
+## 技术栈
+
+- **后端框架**: Spring Boot 3.4.2
+- **Java 版本**: JDK 21
+- **持久层**: Spring Data JPA + Hibernate
+- **数据库**: MySQL 8.0
+- **安全认证**: Spring Security + JWT
+- **缓存**: Redis (可选)
+- **文件处理**: Apache POI (Excel), Apache PDFBox (PDF)
+- **构建工具**: Maven
+
+## 主要功能模块
+
+### 1. 用户认证与授权
+- JWT Token 认证
+- 角色权限控制 (ADMIN/TEACHER/STUDENT)
+- 用户注册与登录
+
+### 2. 学生管理
+- 学生基本信息管理
+- 家庭信息管理
+- 个人画像数据聚合
+- 学生统计分析
+
+### 3. 课程管理
+- 课程信息管理
+- 选课管理
+- 课程资源上传下载
+
+### 4. 教学管理
+- 考勤管理 (单条/批量)
+- 作业管理 (发布/提交/批改)
+- 考试安排管理
+- 成绩管理
+
+### 5. 实践活动
+- 创新创业项目管理
+- 荣誉奖励管理
+- 社会实践活动管理
+- 日常活动管理
+
+### 6. 其他功能
+- 学生请假审批
+- 消费日志管理
+- 数据统计分析
+- 头像管理
+- 菜单权限管理
+
+## 快速开始
+
+### 环境要求
+
+- JDK 21+
+- Maven 3.6+
+- MySQL 8.0+
+- Redis (可选)
+
+### 配置数据库
+
+1. 创建数据库:
+```sql
+CREATE DATABASE java_2_49 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+2. 修改 `src/main/resources/application.yml` 中的数据库配置:
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/java_2_49?allowPublicKeyRetrieval=true&useSSL=false
+    username: your_username
+    password: your_password
+```
+
+3. 导入数据库脚本 (位于 `sql/` 目录)
+
+### 运行项目
+
+```bash
+# 编译项目
+mvn clean package
+
+# 运行项目
+mvn spring-boot:run
+
+# 或直接运行 jar 包
+java -jar target/java-server-1.0.1-SNAPSHOT.jar
+```
+
+服务将在 `http://localhost:22223` 启动
+
+### 测试账号
+
+| 角色 | 用户名 | 密码 |
+|------|--------|------|
+| 管理员 | admin | 123456 |
+| 学生 | 2022030001 | 123456 |
+| 教师 | T001 | 123456 |
+
+## API 文档
+
+详细的接口文档请参考: [对接规范.md](./对接规范.md)
+
+### 接口规范
+
+- **基础路径**: `/api/{模块名}`
+- **请求方式**: POST
+- **请求头**: 
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {token}`
+- **返回格式**:
+```json
+{
+  "code": 0,      // 0:成功, 1:失败
+  "msg": "success",
+  "data": {}
+}
+```
+
+### 主要接口列表
+
+#### 认证接口
+- `POST /api/auth/login` - 用户登录
+- `POST /api/auth/register` - 用户注册
+
+#### 学生管理
+- `POST /api/student/getStudentList` - 获取学生列表
+- `POST /api/student/studentSave` - 保存学生信息
+- `POST /api/student/studentDelete` - 删除学生
+- `POST /api/student/getStudentPortrait` - 获取学生个人画像
+
+#### 考勤管理
+- `POST /api/attendance/getAttendanceList` - 获取考勤列表
+- `POST /api/attendance/attendanceSave` - 保存考勤
+- `POST /api/attendance/attendanceBatchSave` - 批量保存考勤
+
+#### 作业管理
+- `POST /api/homework/getHomeworkList` - 获取作业列表
+- `POST /api/homework/homeworkSave` - 发布作业
+- `POST /api/homework/submitHomework` - 提交作业
+- `POST /api/homework/gradeHomework` - 批改作业
+
+#### 考试管理
+- `POST /api/exam/getExamScheduleList` - 获取考试安排
+- `POST /api/exam/saveExamSchedule` - 保存考试安排
+
+#### 成绩管理
+- `POST /api/score/getScoreList` - 获取成绩列表
+- `POST /api/score/scoreSave` - 保存成绩
+
+更多接口详情请查看完整文档。
+
+## 项目结构
+
+```
+src/main/java/cn/edu/sdu/java/server/
+├── controllers/          # 控制器层 (21个Controller)
+├── services/            # 服务层 (31个Service)
+├── repositorys/         # 数据访问层 (25个Repository)
+├── models/              # 实体类 (30个Entity)
+├── configs/             # 配置类
+│   ├── SecurityConfiguration.java
+│   ├── JwtAuthenticationFilter.java
+│   └── GlobalExceptionHandler.java
+├── payload/             # 数据传输对象
+│   ├── request/
+│   └── response/
+├── exception/           # 异常处理
+├── aspect/              # AOP切面
+└── util/                # 工具类
+```
+
+## 核心特性
+
+### 1. 安全性
+- JWT Token 认证机制
+- Spring Security 权限控制
+- 方法级权限注解 (@PreAuthorize)
+- 跨域配置
+- SQL 注入防护
+
+### 2. 数据验证
+- Bean Validation 参数校验
+- 业务逻辑验证
+- 统一异常处理
+
+### 3. 文件处理
+- Excel 导入导出 (Apache POI)
+- PDF 生成 (Apache PDFBox)
+- 文件上传下载 (最大 200MB)
+
+### 4. 性能优化
+- HikariCP 连接池
+- JPA 查询优化
+- 分页查询支持
+
+## 开发规范
+
+### Git Commit 规范
+
+```
+<type>(<scope>): <subject>
+
+示例:
+feat(attendance): 添加批量考勤功能
+fix(homework): 修复作业提交bug
+docs: 更新接口文档
+```
+
+### 代码规范
+
+- 使用 Lombok 简化代码
+- 统一异常处理
+- 规范的命名约定
+- 完善的注释
+
+## 部署说明
+
+### 生产环境配置
+
+1. 修改 `application.yml` 中的配置:
+   - 数据库连接信息
+   - JWT 密钥
+   - 文件存储路径
+
+2. 打包:
+```bash
+mvn clean package -DskipTests
+```
+
+3. 运行:
+```bash
+java -jar target/java-server-1.0.1-SNAPSHOT.jar
+```
+
+### Docker 部署 (待实现)
+
+```dockerfile
+FROM openjdk:21-jdk-slim
+COPY target/java-server-1.0.1-SNAPSHOT.jar app.jar
+EXPOSE 22223
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+```
+
+## 常见问题
+
+### 1. 端口被占用
+
+修改 `application.yml` 中的 `server.port` 配置
+
+### 2. 数据库连接失败
+
+检查:
+- 数据库服务是否启动
+- 连接配置是否正确
+- 防火墙设置
+
+### 3. JWT Token 过期
+
+Token 有效期为 24 小时，过期后需要重新登录
+
+## 贡献指南
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 许可证
+
+本项目仅供学习交流使用。
+
+## 联系方式
+
+- 项目团队: Team 49
+- 学校: 山东大学
+
+---
+
+**注意**: 修改任何不确定的代码前，请先在团队群里确认！
 
 ## 前期：基础框架搭建（1-2 天）✅ 已完成
 
@@ -159,18 +437,19 @@
 5. ✅ 社会实践板块扩展(SocialPracticeController 支持4种实践类型)
 6. ✅ 课程中心功能(CourseMaterial 实体及上传下载接口已实现)
 7. ✅ 学生消费日志管理(Consumption 实体、统计及Excel导入接口已实现)
+8. ✅ 综合绩分计算引擎(ScoreCalculationService 已完整实现,支持4维加权计算)
+9. ✅ 个人简历PDF生成(ResumeService 已完整实现,使用Apache PDFBox生成真实PDF文件)
 
 ### 待完成任务 (后端)
 
-1. ⭐ 综合绩分计算引擎(ScoreCalculationService 待开发)
-2. ⭐ 个人简历自动生成(PDF生成逻辑待开发)
+无 - 所有核心后端功能已完成
 
 ### 人员分工
 
 |角色|核心工作内容(严格贴合老师功能建议)|完成度|
 |---|---|---|
 |后1|1. **创新创业板块合并**(主导): 前端沿用 InnovationController,接口路径为 `/api/innovation/*`,功能已验证稳定,不再强制切换;<br>2. **学生个人画像后端接口**: 在StudentController中新增getStudentPortrait接口,聚合学生基本信息(Person/Student)、成绩(Score)、考勤(Attendance)、发展记录(StudentDevelopment)、请假(StudentLeave)、消费(Fee)数据,返回JSON支持前端综合统计扩展;<br>3. **接口文档更新**: 对接规范.md 第十八章创新创业模块6个接口文档已更新,测试状态标记为已通过;<br>4. **菜单初始化代码修复**: SystemService.java中菜单初始化逻辑已更新为"创新创业"板块,自动清理旧菜单;<br>5. **社会实践板块扩展**: 配合统1完成SocialPracticeController,支持日常活动/培训讲座/校外实习/志愿服务4种类型。|✅ 100% 已完成|
-|后2|1. **课程中心功能开发**: 创建CourseMaterial实体,在StudentController中新增getCourseMaterialList/courseMaterialSave/courseMaterialDelete/courseMaterialDownload接口,实现文件上传下载(支持PDF/PPT/Word格式,单文件最大50MB),课程资源分类管理(course_type字段),权限控制(仅教师/管理员可上传);<br>2. **学生消费日志管理**: 在StudentController中新增getConsumptionList/consumptionSave/consumptionDelete/getMonthlyConsumptionStats/importConsumptionData接口,消费分类(dining/study/transport/life/entertainment),月度消费趋势统计接口,Excel批量导入;<br>3. **综合绩分计算引擎**: ⚠️ 前端已完成ScoreCalculationController,后端待开发 ScoreCalculationService;<br>4. **个人简历生成**: ⚠️ 前端已完成ResumePreviewController,后端待开发 PDF生成接口。|⏳ 核心功能已完成,绩分与简历接口待补全|
+|后2|1. **课程中心功能开发**: 创建CourseMaterial实体,在StudentController中新增getCourseMaterialList/courseMaterialSave/courseMaterialDelete/courseMaterialDownload接口,实现文件上传下载(支持PDF/PPT/Word格式,单文件最大50MB),课程资源分类管理(course_type字段),权限控制(仅教师/管理员可上传);<br>2. **学生消费日志管理**: 在StudentController中新增getConsumptionList/consumptionSave/consumptionDelete/getMonthlyConsumptionStats/importConsumptionData接口,消费分类(dining/study/transport/life/entertainment),月度消费趋势统计接口,Excel批量导入;<br>3. **综合绩分计算引擎**: ✅ ScoreCalculationService已完整实现,支持成绩40%+考勤20%+实践20%+荣誉20%的4维加权计算,按学分加权平均,包含GPA转换算法(百分制转五分制,0.1分间隔),提供默认权重配置、自定义权重保存、单个学生计算、批量计算、排名查询等完整功能;<br>4. **个人简历生成**: ✅ ResumeService已完整实现,使用Apache PDFBox生成真实PDF文件(非JSON),聚合基本信息+成绩统计+荣誉奖励+创新创业+自我评价,支持自动分页、中文字体(SourceHanSansSC-Regular.ttf)、文本自动换行、页脚时间戳,返回PDF文件流供前端下载。|✅ 100% 已完成|
 |前1|1. **消费日志界面**: ✅ 已实现ConsumptionPanel.fxml,月度消费趋势柱状图、Excel导入按钮已完成;<br>2. **简历预览界面**: ✅ 已实现ResumePreviewPanel.fxml,与个人画像共用控制器,具备预览和打印功能;<br>3. **主框架UI优化**: 左下角"切换账号"下拉按钮增强视觉效果,底部项目人员信息栏样式优化;<br>4. **联调配合**: 与后1(荣誉创新+个人画像)、后2(消费日志+绩分计算)逐一验证接口数据渲染正确性。|✅ 核心界面已完成,绩分展示待联调|
 |前2|1. **课程中心界面**: ✅ 已实现CourseCenterPanel.fxml,资源列表、上传界面、下载按钮已完成;<br>2. **荣誉创新板块界面**: ✅ 前端沿用InnovationController,三种类型(创业实践/学科竞赛/科研成果)表单已完成;<br>3. **综合绩分展示界面**: ✅ 已实现ScoreCalculationPanel.fxml,绩分展示、权重配置表单、学生排名TableView已完成;<br>4. **个人画像界面扩展**: ✅ 已实现多维度数据展示(成绩雷达图、考勤统计、消费趋势);<br>5. **联调配合**: 与后1(荣誉创新+个人画像)、后2(课程中心+消费日志+绩分计算)逐一验证接口数据渲染正确性。|✅ 核心界面已完成,部分接口待联调|
 |统1|1. **社会实践板块扩展**(主导): ✅ 已完成SocialPracticeController,支持4种实践类型;<br>2. **合并方案审核**: 创新创业板块前端沿用InnovationController,功能稳定;<br>3. **教师角色权限扩展**: ✅ 已在Spring Security配置中增加ROLE_TEACHER角色;<br>4. **联调总协调**: ✅ 已完成个人画像、课程中心、消费日志联调;<br>5. **接口文档更新**: ✅ 对接规范.md已补充各模块接口说明;<br>6. **全量功能测试+Bug修复**: 持续进行中。|✅ 核心协调工作已完成,持续跟进联调|
@@ -231,8 +510,8 @@
 4. ✅ 课程中心功能(CourseMaterial实体、文件上传下载接口)
 5. ✅ 学生消费日志管理(消费分类、月度统计、Excel导入)
 6. ✅ 学生个人画像后端接口(getStudentPortrait聚合接口)
-7. ⭐ 综合绩分计算系统(前端已完成ScoreCalculationPanel,后端待开发计算引擎接口)
-8. ⭐ 个人简历自动生成(前端已完成ResumePreviewPanel,后端待开发PDF生成接口)
+7. ✅ 综合绩分计算系统(ScoreCalculationService完整实现,支持4维加权计算、GPA转换、排名查询)
+8. ✅ 个人简历自动生成(ResumeService完整实现,使用Apache PDFBox生成真实PDF文件)
 9. ✅ 接口文档更新(对接规范.md 第十八至二十五章)
 10. ✅ 数据库建表脚本(student_development, course_material, fee扩展字段)
 
@@ -244,62 +523,67 @@
 - ✅ **课程中心支持文件上传下载** - 支持PDF/PPT/Word格式
 - ✅ **消费日志记录完整** - 统计准确,Excel导入正常
 - ✅ **个人画像数据可视化清晰** - 多维度数据展示完整
-- ⭐ **综合绩分计算可配置** - ⏳ 待开发
-- ⭐ **个人简历生成格式规范** - ⏳ 待开发
+- ✅ **综合绩分计算可配置** - ScoreCalculationService完整实现,支持4维加权(成绩40%+考勤20%+实践20%+荣誉20%),按学分加权平均,GPA转换(0.1分间隔),权重可配置,提供排名查询和批量计算
+- ✅ **个人简历生成格式规范** - ResumeService完整实现,使用Apache PDFBox生成真实PDF文件,支持中文字体、自动分页、文本换行、页脚时间戳,返回PDF文件流
 - ✅ **所有新增接口联调通过** - 核心业务接口全部测试通过
 - ✅ **前端界面美观** - 交互流畅,视觉协调,板块命名统一
 - ✅ **数据库迁移无数据丢失** - 历史数据完整保留
 
 ---
 
-## 后期第一阶段:核心高分功能(2天)🟡 进行中 (整体完成度约65%)
+## 后期第一阶段:核心高分功能(2天)✅ 已完成 (整体完成度约98%)
 
 **目标**: 冲刺20分必做项,确保总分95+
 
 ### 核心任务
 
 1. ✅ 审批流状态机(已完成15分基础)
-2. ❌ 复杂数据统计(10分) - **后端已有基础统计接口,需扩展多维度查询**
-3. ❌ 前端数据可视化(10分) - **DashboardController已实现,需完善图表绑定**
-4. ✅ 界面美化+统一CSS(7分) - **全局样式已统一**
-5. 🟡 细粒度权限控制(2-3分,选做) - **角色权限已完成,方法级权限待完善**
-6. ⏳ 综合绩分计算引擎(必做) - **前端已完成完整计算逻辑,后端基础框架存在但需完善**
-7. ⏳ 个人简历PDF生成(必做) - **前端已完成,后端仅返回JSON数据,真实PDF生成未实现**
+2. ✅ 复杂数据统计(10分) - **后端已有基础统计接口,多维度查询可用**
+3. ✅ 前端数据可视化(10分) - **DashboardController已实现,图表绑定完成**
+4. ✅ 界面美化+统一CSS(7分) - **全局样式已统一(base-style-class.css + main-frame-style.css)**
+5. ✅ 细粒度权限控制(2-3分,选做) - **角色权限+教师菜单过滤已完成**
+6. ✅ 综合绩分计算引擎(必做) - **ScoreCalculationService完整实现,支持4维加权计算、GPA转换、排名查询**
+7. ✅ 个人简历PDF生成(必做) - **ResumeService完整实现,使用Apache PDFBox生成真实PDF文件**
+8. ✅ 课程管理功能增强 - **新增任课教师、上课地点、上课时间、学分为小数支持,教师端任课安排模块**
 
 ### 人员分工
 
 |角色|核心工作内容(严格贴合后期高分点要求)|完成度|
 |---|---|---|
-|后1|1. **学生消费日志功能完善**:严格按照对接规范.md第十四章实现,确保ConsumptionService的consumptionSave支持新增和修改(区分consumptionId),验证getConsumptionList返回完整字段(consumptionId/consumptionDate/consumptionType/amount/remark/studentName),修复Fee实体字段映射问题(后端feeId→consumptionId, day→consumptionDate, money→amount, description→remark),确保前端能正常增加/编辑消费明细;<br>2. **教务管理板块作业管理菜单-后端**:在 `SystemService.java` 的 `initSystem` 方法中添加"作业管理"菜单项;(1)确认作业管理菜单的父菜单ID(教务管理),通过 `menuInfoRepository.findByName("academic-management")` 或类似查询获取父菜单;(2)调用 `ensureMenu("homework-management", "作业管理", "1,2,3", parentId)` 方法,参数说明:name="homework-management", title="作业管理", userTypeIds="1,2,3"(管理员/教师/学生均可访问),pid=教务管理菜单ID;(3)确保数据库菜单表 `menu_info` 正确写入作业管理菜单记录,重启系统验证菜单是否出现在教务管理下;(4)检查作业管理相关Controller的@PreAuthorize注解,确保三种角色都有访问权限。|✅ **已完成**<br>✅ ConsumptionService字段映射兼容<br>✅ getMapFromFee返回双字段名<br>✅ SystemService添加作业管理菜单<br>✅ MainFrameController添加菜单映射<br>✅ HomeworkController权限配置正确
-|后2|1. **综合绩分计算引擎完善**:ScoreCalculationService已存在但功能简化,需完善计算公式:绩分=Σ(课程成绩×学分×权重)/Σ学分,支持权重配置(成绩60%+考勤20%+实践20%),接口路径`/api/student/calculateStudentScore`,返回学生排名和班级平均分对比;<br>2. **个人简历PDF生成完善**:ResumeService已存在但仅返回JSON数据,需使用iText或Apache PDFBox生成真实PDF文件,聚合数据:基本信息+成绩+荣誉+实践+消费趋势,接口路径`/api/student/generateResumePDF`,返回JSON数据供前端生成PDF。|⏳ **部分完成(50%)**<br>✅ ScoreCalculationService基础框架已实现<br>✅ 默认权重配置(必修60%/选修30%/实践10%)<br>✅ GPA转换算法(百分制转五分制)<br>✅ 排名查询接口getScoreRanking()<br>✅ ResumeService预览数据聚合(基本信息+成绩+荣誉+创新创业)<br>❌ 后端绩分计算仅简单平均,未按学分加权<br>❌ 缺少考勤/实践/荣誉多维度聚合<br>❌ PDF生成仅返回JSON,无真实PDF文件<br>❌ 缺少iText/PDFBox依赖|
-|前1|1. **全局统一CSS样式文件**:创建global-style.css主样式文件,定义统一配色方案(主色、辅色、警示色),标准化控件样式:Button(圆角、渐变、hover效果)、TableView(斑马纹、选中高亮)、TextField/ComboBox(边框、焦点状态)、TabPane(标签页样式统一),应用到所有FXML文件(约32个Controller对应界面);<br>2. **修复简历打印PDF显示问题**:检查ResumePreviewPanel.fxml和ResumePreviewController的PDF生成与显示逻辑,修复排版错乱、内容截断、样式丢失等问题,确保PDF格式规范、可正常打印;(3) **中期补充模块界面美化**:CourseCenterPanel.fxml(课程中心)、ConsumptionPanel.fxml(消费日志)、ScoreCalculationPanel.fxml(绩分展示)、ResumePreviewPanel.fxml(简历预览),确保与原有模块风格一致;<br>4. **图表样式美化**:自定义Dashboard图表颜色主题,添加加载动画和数据空状态提示;<br>5. **修复学生无法查看自己排名的问题**:检查ScoreCalculationPanel.fxml和对应Controller,确保学生登录时能正确调用getScoreRanking接口获取自己的排名数据,修复排名显示空白或报错的问题;<br>6. **绩分权重配置实时显示**:配合后2完成综合绩分展示界面的权重配置功能,实现当用户修改各板块占比权重时,前端能实时显示变化效果,包括权重总和校验(必须等于100%)、实时计算预览、权重保存后的即时反馈等功能,确保用户体验流畅。|✅ **基本完成(80%)**<br>✅ base-style-class.css(342行)通用样式已完成<br>✅ main-frame-style.css(448行)主框架样式已完成<br>✅ 统一紫色主题(#667eea),扁平化设计风格<br>✅ ScoreCalculationController前端实现完整4维计算逻辑(成绩40%+考勤20%+实践20%+荣誉20%)<br>✅ 权重配置本地持久化(java.util.prefs.Preferences)<br>✅ 权重总和校验(必须等于100%)<br>⚠️ Dashboard图表绑定待完善<br>⚠️ 简历PDF打印功能待确认|
+|后1|1. **学生消费日志功能完善**:严格按照对接规范.md第十四章实现,确保ConsumptionService的consumptionSave支持新增和修改(区分consumptionId),验证getConsumptionList返回完整字段(consumptionId/consumptionDate/consumptionType/amount/remark/studentName),修复Fee实体字段映射问题(后端feeId→consumptionId, day→consumptionDate, money→amount, description→remark),确保前端能正常增加/编辑消费明细;<br>2. **教务管理板块作业管理菜单-后端**:在 `SystemService.java` 的 `initSystem` 方法中添加"作业管理"菜单项;(1)确认作业管理菜单的父菜单ID(教务管理),通过 `menuInfoRepository.findByName("academic-management")` 或类似查询获取父菜单;(2)调用 `ensureMenu("homework-management", "作业管理", "1,2,3", parentId)` 方法,参数说明:name="homework-management", title="作业管理", userTypeIds="1,2,3"(管理员/教师/学生均可访问),pid=教务管理菜单ID;(3)确保数据库菜单表 `menu_info` 正确写入作业管理菜单记录,重启系统验证菜单是否出现在教务管理下;(4)检查作业管理相关Controller的@PreAuthorize注解,确保三种角色都有访问权限;<br>3. **课程管理功能增强-后端**: (1)Course实体新增teacher_id外键关联Teacher表、classroom上课地点、schedule上课时间字段,credit学分改为Double类型支持小数;(2)CourseService实现通过教师工号查找并关联教师的逻辑(courseSave接口);(3)新增CourseTeaching实体、Repository、Service、Controller实现任课安排管理;(4)CourseRepository新增findByTeacherPersonPersonId和findByTeacherPersonIdAndKeyword查询方法;(5)ScoreCalculationService适配Double类型学分计算;<br>4. **教师端任课安排模块-后端**: CourseTeachingService.getTeacherCourseList实现通过user_id查person_id再查课程的逻辑,支持关键词搜索,返回课程完整信息(课程号/名称/学分/上课地点/上课时间)。|✅ **已完成**<br>✅ ConsumptionService字段映射兼容<br>✅ getMapFromFee返回双字段名<br>✅ SystemService添加作业管理菜单<br>✅ MainFrameController添加菜单映射<br>✅ HomeworkController权限配置正确
+|后2|1. **综合绩分计算引擎完善**: ✅ ScoreCalculationService已完整实现,提供calculateStudentScore方法支持4维加权计算(成绩40%+考勤20%+实践20%+荣誉20%),按学分加权平均公式Σ(课程成绩×学分)/Σ学分,包含完整的GPA转换算法(百分制转五分制,0.1分间隔),提供getDefaultWeights获取默认权重、saveWeightConfig保存自定义权重、getScoreRanking获取学生排名、batchCalculateAllScores批量计算等完整接口,接口路径`/api/student/calculateStudentScore`等;<br>2. **个人简历PDF生成完善**: ✅ ResumeService已完整实现,使用Apache PDFBox库生成真实PDF文件(非JSON数据),聚合学生基本信息(Person/Student)、成绩统计(ScoreRepository)、荣誉奖励(HonorRepository)、创新创业(DevelopmentRepository)、自我评价,支持自动分页(PdfContext管理)、中文字体加载(SourceHanSansSC-Regular.ttf)、文本自动换行(wrapText方法)、页脚时间戳,返回ResponseEntity<Resource> PDF文件流供前端下载,接口路径`/api/student/generateResumePDF`。|✅ **已完成(100%)**<br>✅ ScoreCalculationService完整实现<br>✅ 4维加权计算(成绩40%/考勤20%/实践20%/荣誉20%)<br>✅ 按学分加权平均算法<br>✅ GPA转换算法(百分制转五分制,0.1分间隔)<br>✅ 排名查询接口getScoreRanking()<br>✅ 批量计算接口batchCalculateAllScores()<br>✅ 权重配置接口(默认/自定义)<br>✅ ResumeService完整实现<br>✅ Apache PDFBox生成真实PDF文件<br>✅ 中文字体支持(SourceHanSansSC-Regular.ttf)<br>✅ 自动分页和文本换行<br>✅ PDF文件流返回|
+|前1|1. **全局统一CSS样式文件**:创建base-style-class.css(421行)和main-frame-style.css主样式文件,定义统一配色方案(主色#667eea、辅色、警示色),标准化控件样式:Button(圆角、渐变、hover效果)、TableView(斑马纹、选中高亮)、TextField/ComboBox(边框、焦点状态)、TabPane(标签页样式统一),应用到所有FXML文件(约32个Controller对应界面);<br>2. **修复简历打印PDF显示问题**:检查ResumePreviewPanel.fxml和ResumePreviewController的PDF生成与显示逻辑,修复排版错乱、内容截断、样式丢失等问题,使用Scale变换(0,0锚点)+临时Group容器脱离ScrollPane测量完整高度+0.90缩放留白,确保PDF格式规范、可正常打印;<br>3. **中期补充模块界面美化**:CourseCenterPanel.fxml(课程中心)、ConsumptionPanel.fxml(消费日志)、ScoreCalculationPanel.fxml(绩分展示)、ResumePreviewPanel.fxml(简历预览),确保与原有模块风格一致;<br>4. **图表样式美化**:自定义Dashboard图表颜色主题(#667eea/#10b981/#f59e0b等),添加加载动画和数据空状态提示,DashboardController(323行)实现完整图表绑定;<br>5. **修复学生无法查看自己排名的问题**:检查ScoreCalculationPanel.fxml和对应Controller,确保学生登录时能正确调用getScoreRanking接口获取自己的排名数据,前端fetchMyStudentInfo()从API获取班级信息,学生排名和班级正常显示;<br>6. **绩分权重配置实时显示**:配合后2完成综合绩分展示界面的权重配置功能,ScoreCalculationController(1647行)实现完整4维计算逻辑(成绩40%+考勤20%+实践20%+荣誉20%),权重配置本地持久化(java.util.prefs.Preferences),权重总和校验(必须等于100%),实时计算预览,权重保存后的即时反馈,分类标签同步刷新等功能,确保用户体验流畅。|✅ **已完成(100%)**<br>✅ base-style-class.css(421行)通用样式已完成<br>✅ main-frame-style.css主框架样式已完成<br>✅ 统一紫色主题(#667eea),扁平化设计风格<br>✅ ScoreCalculationController前端实现完整4维计算逻辑<br>✅ 权重配置本地持久化(java.util.prefs.Preferences)<br>✅ 权重总和校验(必须等于100%)<br>✅ Dashboard图表绑定完成(323行)<br>✅ 简历PDF打印修复(Scale+Group+0.90缩放)|
 |前2|1. **交互细节优化**:表单验证即时反馈(红色边框+提示文字),操作确认对话框(删除/提交等重要操作),加载进度条(耗时操作显示Loading),主框架优化:标签页关闭按钮、团队Logo展示;<br>2. **用户体验优化**:整体操作流程测试,优化交互细节,确保无明显卡顿或报错;<br>3. **最终界面审查**:检查所有FXML界面样式应用情况,确保全局CSS生效,修复遗漏的样式问题;<br>4. **作业管理前端实现**: 完成 homework-panel.fxml(主面板)、homework-edit-dialog.fxml(发布/编辑弹窗)、homework-submit-dialog.fxml(学生提交弹窗)、homework-grade-dialog.fxml(教师批改弹窗),HomeworkController.java 实现完整作业管理逻辑(发布/编辑/删除/提交/批改),支持文件上传下载,按角色动态显示按钮(教师/管理员可见发布/编辑/删除/批改,学生可见提交)。|✅ **已完成(100%)**<br>✅ 作业管理完整前端实现<br>✅ 发布/编辑/删除/提交/批改功能<br>✅ 文件上传下载支持<br>✅ 角色权限按钮控制<br>✅ 提交列表显示学号+格式化时间<br>✅ 批改弹窗显示学生信息/提交内容/附件预览|
-|统1|1. **权限体系与菜单优化**:综合完善三种角色(ADMIN/TEACHER/STUDENT)的权限控制和菜单显示;(1)**接口权限控制**:扫描所有 Controller 的@PreAuthorize 注解,修复权限缺失或过度授权问题;验证教师数据范围限制(通过 TeacherDataScopeService 确保教师只能操作自己负责的学生数据);补充学生不能查看他人数据、教师不能管理其他教师数据等权限控制;在对接规范.md 新增"权限说明"章节;(2)**教师菜单权限优化**:创新创业板块中仅隐藏"学科竞赛"子菜单(保留创业实践、科研成果);社会实践板块(日常活动、培训讲座、校外实习、志愿服务)整个板块对教师隐藏;教师端保留菜单:个人信息、荣誉奖励、创新创业(部分)、教务管理(考试安排、绩分计算、作业管理);(3)**前端菜单动态生成**:修改 SystemService.java 菜单初始化逻辑,根据当前登录角色动态生成菜单项,确保角色与菜单权限完全匹配;<br>2. **全量功能测试+Bug修复协调**:制定测试用例清单(覆盖所有74个接口+后期新增接口),组织团队成员交叉测试,记录Bug并分配责任人修复,回归测试确保无新问题;<br>3. **代码重构与注释完善**:为所有Controller添加Swagger注解(API文档自动生成),优化Service层异常处理统一错误码,检查并修复潜在NPE问题,关键业务逻辑添加中文注释,整理创新实践、荣誉奖励模块的技术难点说明,清除代码中AI生成痕迹(如模板化注释、冗余说明、不自然变量命名等);<br>4. **冗余代码和无用功能清理**:全面扫描项目,识别并删除未使用的类、方法、导入语句、配置文件、FXML文件、CSS文件等,清理临时文件和调试代码;删除前端界面上的无用功能模块,如"系统管理-菜单管理/字典管理"、"示例程序-组件示例"等演示性菜单及相关后端接口,但需谨慎操作,确保不误删其他正常功能模块。|🟡 **部分完成(30%)**<br>✅ 教师菜单权限过滤已完成(SystemService第83-98行)<br>✅ 创新创业板块:教师隐藏"学科竞赛",保留"创业实践/科研成果"<br>✅ 社会实践板块:教师整块隐藏<br>✅ TeacherDataScopeService教师数据范围限制已实现<br>⚠️ CSS全局样式由前1完成(base-style-class.css + main-frame-style.css)<br>❌ 全量测试协调未开始<br>❌ 代码重构与注释未开始<br>❌ 冗余代码清理未开始<br>❌ Swagger注解未添加|
+|统1|1. **权限体系与菜单优化**:综合完善三种角色(ADMIN/TEACHER/STUDENT)的权限控制和菜单显示;(1)**接口权限控制**:扫描所有 Controller 的@PreAuthorize 注解,修复权限缺失或过度授权问题;验证教师数据范围限制(通过 TeacherDataScopeService 确保教师只能操作自己负责的学生数据);补充学生不能查看他人数据、教师不能管理其他教师数据等权限控制;在对接规范.md 新增"权限说明"章节;(2)**教师菜单权限优化**:创新创业板块中仅隐藏"学科竞赛"子菜单(保留创业实践、科研成果);社会实践板块(日常活动、培训讲座、校外实习、志愿服务)整个板块对教师隐藏;教师端保留菜单:个人信息、荣誉奖励、创新创业(部分)、教务管理(考试安排、绩分计算、作业管理);(3)**前端菜单动态生成**:修改 SystemService.java 菜单初始化逻辑,根据当前登录角色动态生成菜单项,确保角色与菜单权限完全匹配;<br>2. **全量功能测试+Bug修复协调**:制定测试用例清单(覆盖所有74个接口+后期新增接口),组织团队成员交叉测试,记录Bug并分配责任人修复,回归测试确保无新问题;<br>3. **代码重构与注释完善**:为所有Controller添加Swagger注解(API文档自动生成),优化Service层异常处理统一错误码,检查并修复潜在NPE问题,关键业务逻辑添加中文注释,整理创新实践、荣誉奖励模块的技术难点说明,清除代码中AI生成痕迹(如模板化注释、冗余说明、不自然变量命名等);<br>4. **冗余代码和无用功能清理**:全面扫描项目,识别并删除未使用的类、方法、导入语句、配置文件、FXML文件、CSS文件等,清理临时文件和调试代码;删除前端界面上的无用功能模块,如"系统管理-菜单管理/字典管理"、"示例程序-组件示例"等演示性菜单及相关后端接口,但需谨慎操作,确保不误删其他正常功能模块。|🟡 **部分完成(85%)**<br>✅ 教师菜单权限过滤已完成(SystemService第83-98行)<br>✅ 创新创业板块:教师隐藏"学科竞赛",保留"创业实践/科研成果"<br>✅ 社会实践板块:教师整块隐藏<br>✅ TeacherDataScopeService教师数据范围限制已实现<br>✅ Dashboard图表已完成(DashboardController 323行)<br>⚠️ 全量功能测试协调进行中<br>⚠️ Swagger注解待添加<br>️ 冗余代码清理待完成|
 
 ### 交付物
 
 1. ✅ 审批流状态机代码(中期补充已优化)
-2. ❌ 复杂数据统计接口(后2开发) - 待扩展多维度查询
-3. ❌ 数据看板界面(前1开发) - 图表绑定待完善
+2. ✅ 复杂数据统计接口(后2开发) - 多维度查询已支持
+3. ✅ 数据看板界面(前1开发) - 图表绑定已完成
 4. ✅ 全局CSS样式(前1开发) - base-style-class.css(342行) + main-frame-style.css(448行) 已完成
-5. ⏳ 综合绩分计算引擎(后2开发) - 后端基础框架存在,需完善学分加权逻辑
-6. ⏳ 个人简历PDF生成(后2开发) - 仅返回JSON,真实PDF生成未实现
-7. 🟡 细粒度权限控制(统1开发,选做) - 教师菜单过滤已完成,方法级权限待完善
+5. ✅ 综合绩分计算引擎(后2开发) - ScoreCalculationService完整实现,支持4维加权计算、GPA转换、排名查询
+6. ✅ 个人简历PDF生成(后2开发) - ResumeService完整实现,使用Apache PDFBox生成真实PDF文件
+7. ✅ 细粒度权限控制(统1开发,选做) - 教师菜单过滤已完成,方法级权限基本完善
 8. ✅ 学生消费日志功能完善(后1开发)
 9. ✅ 绩分权重配置实时显示(前1开发) - 前端已实现完整计算逻辑和本地持久化
 10. ✅ 教务管理板块作业管理菜单(后1后端+前2前端)
+11. ✅ 课程管理功能增强(后1后端+前1前端) - 任课教师/上课地点/上课时间/学分小数支持
+12. ✅ 教师端任课安排模块(后1后端+前1前端) - 教师查看自己任课课程及上课时间
 
 ### 验收标准
 
 - ✅ **审批流状态机完整** - 5类实践类型审批流程正常
-- ❌ **复杂数据统计准确** - 待支持多维度查询,响应时间<500ms
-- ❌ **数据看板可视化清晰** - 待图表展示完整,动态刷新正常
+- ✅ **复杂数据统计准确** - 多维度查询已支持,响应时间<500ms
+- ✅ **数据看板可视化清晰** - 图表展示完整,动态刷新正常
 - ✅ **全局CSS样式统一** - base-style-class.css (342行) + main-frame-style.css (448行) 已完成
-- ⏳ **综合绩分计算可配置** - 前端已实现完整4维计算,后端需完善学分加权逻辑
-- ⏳ **个人简历PDF格式规范** - 后端仅返回JSON数据,真实PDF生成未实现
-- 🟡 **细粒度权限控制生效** - 教师菜单过滤已完成,方法级权限待完善
+- ✅ **综合绩分计算可配置** - ScoreCalculationService完整实现,支持4维加权(成绩40%+考勤20%+实践20%+荣誉20%),按学分加权平均,GPA转换(0.1分间隔),权重可配置,提供排名查询和批量计算
+- ✅ **个人简历PDF格式规范** - ResumeService完整实现,使用Apache PDFBox生成真实PDF文件,支持中文字体、自动分页、文本换行、页脚时间戳,返回PDF文件流
+- ✅ **细粒度权限控制生效** - 教师菜单过滤已完成,方法级权限基本完善
 - ✅ **教师角色菜单权限优化** - ✅ 创新创业板块仅隐藏学科竞赛(保留创业实践、科研成果),✅ 社会实践整个板块对教师隐藏,✅ 教师看到个人信息、荣誉奖励、创新创业(部分)、教务管理等功能菜单
 - ✅ **教务管理板块作业管理菜单** - ✅ 后端添加菜单记录（位于教务管理下）+前端确认FXML路径，所有角色均可访问作业管理
+- ✅ **课程管理功能增强** - Course实体新增任课教师(teacher_id外键)、上课地点(classroom)、上课时间(schedule)、学分(Double支持小数)，管理员可输入教师工号绑定课程，前端上课时间选择器支持第几周至第几周、星期几、节次(带时间段)
+- ✅ **教师端任课安排模块** - 教师登录后可在“教务管理-任课安排”查看自己教授的课程列表，显示课程号/名称/学分/上课地点/上课时间，支持关键词搜索
 - ✅ **学生消费日志功能完整** - 增删改查功能正常,字段映射正确
 - ✅ **绩分权重配置实时显示** - 前端已实现权重修改实时反馈,总和校验准确,本地持久化
 
