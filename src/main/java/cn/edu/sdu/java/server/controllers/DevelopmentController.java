@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.DevelopmentService;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/development")
+@Tag(name = "Development", description = "Development and entrepreneurship APIs")
 public class DevelopmentController {
     private final DevelopmentService developmentService;
 
@@ -20,6 +23,7 @@ public class DevelopmentController {
     /**
      * 获取发展记录列表(荣誉/创新/竞赛/成果)
      */
+    @Operation(summary = "获取发展记录列表(荣誉/创新/竞赛/成果)")
     @PostMapping("/getDevelopmentList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getDevelopmentList(@Valid @RequestBody DataRequest dataRequest) {
@@ -29,6 +33,7 @@ public class DevelopmentController {
     /**
      * 分页获取发展记录数据
      */
+    @Operation(summary = "分页获取发展记录数据")
     @PostMapping("/getDevelopmentPageList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getDevelopmentPageList(@Valid @RequestBody DataRequest dataRequest) {
@@ -38,6 +43,7 @@ public class DevelopmentController {
     /**
      * 保存发展记录
      */
+    @Operation(summary = "保存发展记录")
     @PostMapping("/developmentSave")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse developmentSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -47,6 +53,7 @@ public class DevelopmentController {
     /**
      * 删除发展记录
      */
+    @Operation(summary = "删除发展记录")
     @PostMapping("/developmentDelete")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse developmentDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -56,6 +63,7 @@ public class DevelopmentController {
     /**
      * 审批发展记录
      */
+    @Operation(summary = "审批发展记录")
     @PostMapping("/developmentApprove")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse developmentApprove(@Valid @RequestBody DataRequest dataRequest) {
@@ -65,6 +73,7 @@ public class DevelopmentController {
     /**
      * 获取类型选项列表
      */
+    @Operation(summary = "获取类型选项列表")
     @PostMapping("/getTypeOptionList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getTypeOptionList(@Valid @RequestBody DataRequest dataRequest) {

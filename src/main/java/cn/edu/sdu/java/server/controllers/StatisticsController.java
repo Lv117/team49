@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.StatisticsService;
@@ -11,12 +13,14 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/statistics")
+@Tag(name = "Statistics", description = "Dashboard statistics APIs")
 public class StatisticsController {
     private final StatisticsService statisticsService;
     public StatisticsController(StatisticsService statisticsService) {
         this.statisticsService = statisticsService;
     }
 
+    @Operation(summary = "Get dashboard data")
     @PostMapping("/getMainPageData")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT') or hasRole('TEACHER')")
     public DataResponse getMainPageData(@Valid @RequestBody DataRequest dataRequest) {

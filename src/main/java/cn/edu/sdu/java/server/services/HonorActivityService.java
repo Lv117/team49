@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.DailyActivity;
 import cn.edu.sdu.java.server.models.Honor;
 import cn.edu.sdu.java.server.models.Student;
@@ -24,19 +26,18 @@ import java.util.*;
 public class HonorActivityService {
     private final HonorRepository honorRepository;
     private final DailyActivityRepository dailyActivityRepository;
-    private final ApprovalRecordRepository approvalRecordRepository;  // 添加这行
+    private final ApprovalRecordRepository approvalRecordRepository;
     private final StudentRepository studentRepository;
     private final TeacherDataScopeService teacherDataScopeService;
 
-    // 修改构造函数
     public HonorActivityService(HonorRepository honorRepository,
                                 DailyActivityRepository dailyActivityRepository,
                                 ApprovalRecordRepository approvalRecordRepository,
                                 StudentRepository studentRepository,
-                                TeacherDataScopeService teacherDataScopeService) {  // 添加这个参数
+                                TeacherDataScopeService teacherDataScopeService) {
         this.honorRepository = honorRepository;
         this.dailyActivityRepository = dailyActivityRepository;
-        this.approvalRecordRepository = approvalRecordRepository;  // 添加这行赋值
+        this.approvalRecordRepository = approvalRecordRepository;
         this.studentRepository = studentRepository;
         this.teacherDataScopeService = teacherDataScopeService;
     }
@@ -65,11 +66,10 @@ public class HonorActivityService {
             honorList = honorRepository.findAll();
         }
         
-        // 过滤荣誉名称
         if (honorName != null && !honorName.isEmpty()) {
             final String searchName = honorName;
             honorList = honorList.stream()
-                    .filter(h -> h.getHonorName().contains(searchName))
+                    .filter(h -> containsKeyword(h.getHonorName(), searchName))
                     .toList();
         }
         if (teacherDataScopeService.isCurrentRoleTeacher()) {
@@ -132,7 +132,7 @@ public class HonorActivityService {
                 for (Honor honor : list) {
                     boolean match = true;
                     if (honorName != null && !honorName.isEmpty()) {
-                        if (!honor.getHonorName().contains(honorName)) {
+                        if (!containsKeyword(honor.getHonorName(), honorName)) {
                             match = false;
                         }
                     }
@@ -170,17 +170,17 @@ public class HonorActivityService {
         }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         String studentName = CommonMethod.getString(form, "studentName");
+        // 学生端只能维护自己的荣誉数据，后端统一以当前登录人身份为准。
         if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
             Integer currentStudentId = CommonMethod.getPersonId();
             if (currentStudentId == null) {
-                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "未识别到当前学生身份，无法保存");
             }
-            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
-            if (sop.isEmpty() || sop.get().getPerson() == null) {
-                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
-            }
+            Student student = studentRepository.findByPersonPersonId(currentStudentId)
+                    .filter(s -> s.getPerson() != null)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "当前学生信息不存在，无法保存"));
             studentId = currentStudentId;
-            studentName = sop.get().getPerson().getName();
+            studentName = student.getPerson().getName();
         }
         
         Honor honor = null;
@@ -249,33 +249,31 @@ public class HonorActivityService {
         String approvalOpinion = dataRequest.getString("approvalOpinion");
     
         if (honorId == null || honorId <= 0) {
-            return CommonMethod.getReturnMessageError("荣誉 ID 不能为空");
+            throw new BusinessException(ErrorCodes.HONOR_NOT_FOUND, "荣誉ID不能为空");
         }
         if (status == null || status.isEmpty()) {
-            return CommonMethod.getReturnMessageError("目标状态不能为空");
+            throw new BusinessException(ErrorCodes.HONOR_STATUS_INVALID, "目标状态不能为空");
         }
-    
-        Optional<Honor> op = honorRepository.findById(honorId);
-        if (op.isEmpty()) {
-            return CommonMethod.getReturnMessageError("荣誉记录不存在");
-        }
-    
-        Honor honor = op.get();
+
+        Honor honor = honorRepository.findById(honorId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.HONOR_NOT_FOUND, "荣誉记录不存在"));
         if (teacherDataScopeService.isCurrentRoleTeacher()
                 && !teacherDataScopeService.canCurrentTeacherAccessStudent(honor.getStudentId())) {
-            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
         }
         String currentStatus = honor.getStatus();
+        // 审批必须按状态机流转，避免出现“草稿直接终审通过”这类越级状态。
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
-            return CommonMethod.getReturnMessageError(
+            throw new BusinessException(
+                    ErrorCodes.HONOR_STATUS_INVALID,
                     ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
         }
-    
+
         honor.setStatus(status);
         honor.setApprovalOpinion(approvalOpinion);
         honor.setUpdateTime(LocalDateTime.now());
         honorRepository.save(honor);
-        // 保存审批记录
+
         ApprovalRecord record = new ApprovalRecord();
         record.setBusinessType("honor");
         record.setBusinessId(honor.getId());
@@ -314,7 +312,6 @@ public class HonorActivityService {
             activityList = dailyActivityRepository.findAll();
         }
 
-        // 按活动类型过滤
         if (activityType != null && !activityType.isEmpty()) {
             final String typeFilter = activityType;
             activityList = activityList.stream()
@@ -322,11 +319,10 @@ public class HonorActivityService {
                     .toList();
         }
 
-        // 按活动名称过滤
         if (activityName != null && !activityName.isEmpty()) {
             final String searchName = activityName;
             activityList = activityList.stream()
-                    .filter(a -> a.getActivityName().contains(searchName))
+                    .filter(a -> containsKeyword(a.getActivityName(), searchName))
                     .toList();
         }
         if (teacherDataScopeService.isCurrentRoleTeacher()) {
@@ -389,7 +385,7 @@ public class HonorActivityService {
                 for (DailyActivity activity : list) {
                     boolean match = true;
                     if (activityName != null && !activityName.isEmpty()) {
-                        if (!activity.getActivityName().contains(activityName)) {
+                        if (!containsKeyword(activity.getActivityName(), activityName)) {
                             match = false;
                         }
                     }
@@ -418,20 +414,26 @@ public class HonorActivityService {
      */
     public DataResponse dailyActivitySave(DataRequest dataRequest) {
         Map<String, Object> form = dataRequest.getMap("form");
+        if (form == null || form.isEmpty()) {
+            form = dataRequest.getData();
+        }
+        if (form == null) {
+            form = new HashMap<>();
+        }
         Integer activityId = CommonMethod.getInteger(form, "activityId");
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         String studentName = CommonMethod.getString(form, "studentName");
+        // 日常活动与荣誉模块一样，学生端提交时只允许写入本人数据。
         if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
             Integer currentStudentId = CommonMethod.getPersonId();
             if (currentStudentId == null) {
-                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "未识别到当前学生身份，无法保存");
             }
-            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
-            if (sop.isEmpty() || sop.get().getPerson() == null) {
-                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
-            }
+            Student student = studentRepository.findByPersonPersonId(currentStudentId)
+                    .filter(s -> s.getPerson() != null)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "当前学生信息不存在，无法保存"));
             studentId = currentStudentId;
-            studentName = sop.get().getPerson().getName();
+            studentName = student.getPerson().getName();
         }
         
         DailyActivity activity = null;
@@ -496,25 +498,23 @@ public class HonorActivityService {
         String approvalOpinion = dataRequest.getString("approvalOpinion");
 
         if (activityId == null || activityId <= 0) {
-            return CommonMethod.getReturnMessageError("活动 ID 不能为空");
+            throw new BusinessException(ErrorCodes.DAILY_ACTIVITY_NOT_FOUND, "活动ID不能为空");
         }
         if (status == null || status.isEmpty()) {
-            return CommonMethod.getReturnMessageError("目标状态不能为空");
+            throw new BusinessException(ErrorCodes.DAILY_ACTIVITY_STATUS_INVALID, "目标状态不能为空");
         }
 
-        Optional<DailyActivity> op = dailyActivityRepository.findById(activityId);
-        if (op.isEmpty()) {
-            return CommonMethod.getReturnMessageError("活动记录不存在");
-        }
-
-        DailyActivity activity = op.get();
+        DailyActivity activity = dailyActivityRepository.findById(activityId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.DAILY_ACTIVITY_NOT_FOUND, "活动记录不存在"));
         if (teacherDataScopeService.isCurrentRoleTeacher()
                 && !teacherDataScopeService.canCurrentTeacherAccessStudent(activity.getStudentId())) {
-            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
         }
         String currentStatus = activity.getStatus();
+        // 日常活动审批也沿用统一状态机，确保教师审批和管理员终审顺序稳定。
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
-            return CommonMethod.getReturnMessageError(
+            throw new BusinessException(
+                    ErrorCodes.DAILY_ACTIVITY_STATUS_INVALID,
                     ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
         }
 
@@ -522,7 +522,7 @@ public class HonorActivityService {
         activity.setApprovalOpinion(approvalOpinion);
         activity.setUpdateTime(LocalDateTime.now());
         dailyActivityRepository.save(activity);
-        // 保存审批记录
+
         ApprovalRecord record = new ApprovalRecord();
         record.setBusinessType("activity");
         record.setBusinessId(activity.getId());
@@ -535,6 +535,10 @@ public class HonorActivityService {
         approvalRecordRepository.save(record);
 
         return CommonMethod.getReturnMessageOK();
+    }
+
+    private boolean containsKeyword(String source, String keyword) {
+        return source != null && keyword != null && source.contains(keyword);
     }
 
     // ==================== 辅助方法 ====================

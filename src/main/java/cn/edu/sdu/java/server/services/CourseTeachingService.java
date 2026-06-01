@@ -139,18 +139,11 @@ public class CourseTeachingService {
             return CommonMethod.getReturnMessageError("教师ID不能为空");
         }
 
-        System.out.println("[TeacherCourse Debug] 教师ID=" + teacherId + ", keyword=" + keyword);
-
         List<Course> courseList;
         if (keyword != null && !keyword.isEmpty()) {
             courseList = courseRepository.findByTeacherPersonIdAndKeyword(teacherId, keyword);
         } else {
             courseList = courseRepository.findByTeacherPersonPersonId(teacherId);
-        }
-
-        System.out.println("[TeacherCourse Debug] 查询到课程数量=" + courseList.size());
-        for (Course c : courseList) {
-            System.out.println("[TeacherCourse Debug] 课程: " + c.getNum() + " - " + c.getName());
         }
 
         List<Map<String, Object>> dataList = new ArrayList<>();

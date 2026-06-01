@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.EUserType;
 import cn.edu.sdu.java.server.models.Person;
 import cn.edu.sdu.java.server.models.Student;
@@ -86,36 +88,32 @@ public class RegisterServiceImpl implements RegisterService {
         String major = dataRequest.getString("major");
         String className = dataRequest.getString("className");
 
-        // 2. 参数校验
         if (username == null || username.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("用户名不能为空");
+            throw new BusinessException(ErrorCodes.REGISTER_USERNAME_REQUIRED, "用户名不能为空");
         }
         if (password == null || password.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("密码不能为空");
+            throw new BusinessException(ErrorCodes.REGISTER_PASSWORD_REQUIRED, "密码不能为空");
         }
         if (name == null || name.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("姓名不能为空");
+            throw new BusinessException(ErrorCodes.REGISTER_NAME_REQUIRED, "姓名不能为空");
         }
         if (role == null || role.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("角色不能为空");
+            throw new BusinessException(ErrorCodes.REGISTER_ROLE_REQUIRED, "角色不能为空");
         }
         if (userId == null || userId.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("学号/工号不能为空");
+            throw new BusinessException(ErrorCodes.REGISTER_USER_ID_REQUIRED, "学号/工号不能为空");
         }
 
-        // 用户名长度校验
         if (username.length() > 20) {
-            return CommonMethod.getReturnMessageError("用户名长度不能超过20位");
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "用户名长度不能超过20位");
         }
 
-        // 密码长度校验
         if (password.length() < 6) {
-            return CommonMethod.getReturnMessageError("密码长度不能少于6位");
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "密码长度不能少于6位");
         }
 
-        // 3. 校验用户名是否重复
         if (userRepository.existsByUserName(username.trim())) {
-            return CommonMethod.getReturnMessageError("用户名已存在");
+            throw new BusinessException(ErrorCodes.REGISTER_USERNAME_CONFLICT, "用户名已存在");
         }
 
         // 4. 角色映射
@@ -136,11 +134,11 @@ public class RegisterServiceImpl implements RegisterService {
                 personType = "2";
                 break;
             default:
-                return CommonMethod.getReturnMessageError("无效的角色，仅支持：管理员、学生、教师");
+                throw new BusinessException(ErrorCodes.REGISTER_ROLE_INVALID, "无效的角色，仅支持：管理员、学生、教师");
         }
 
         if (userType == null) {
-            return CommonMethod.getReturnMessageError("角色类型不存在，请联系管理员");
+            throw new BusinessException(ErrorCodes.REGISTER_ROLE_INVALID, "角色类型不存在，请联系管理员");
         }
 
         // 5. 创建 Person 记录

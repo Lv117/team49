@@ -1,9 +1,13 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
+import cn.edu.sdu.java.server.models.Course;
 import cn.edu.sdu.java.server.models.CourseMaterial;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.CourseMaterialRepository;
+import cn.edu.sdu.java.server.repositorys.CourseRepository;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +42,28 @@ public class CourseMaterialService {
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024;
     // 上传目录
     private static final String UPLOAD_DIR = System.getProperty("user.dir") + "/uploads/course-materials/";
+
+    /**
+     * 解析文件路径：兼容旧数据的绝对路径和新数据的相对文件名
+     */
+    private Path resolveFilePath(String storedPath) {
+        if (storedPath == null || storedPath.isEmpty()) {
+            return null;
+        }
+        Path path = Paths.get(storedPath);
+        if (path.isAbsolute()) {
+            return path;
+        }
+        return Paths.get(UPLOAD_DIR, storedPath);
+    }
     
     private final CourseMaterialRepository courseMaterialRepository;
-    
-    public CourseMaterialService(CourseMaterialRepository courseMaterialRepository) {
+    private final CourseRepository courseRepository;
+
+    public CourseMaterialService(CourseMaterialRepository courseMaterialRepository,
+                                 CourseRepository courseRepository) {
         this.courseMaterialRepository = courseMaterialRepository;
+        this.courseRepository = courseRepository;
     }
     
     /**
@@ -71,25 +92,8 @@ public class CourseMaterialService {
      * 保存课程资料(包含文件上传)
      */
     public DataResponse courseMaterialSave(DataRequest dataRequest, MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            return CommonMethod.getReturnMessageError("文件不能为空");
-        }
-        
-        // 校验文件大小
-        if (file.getSize() > MAX_FILE_SIZE) {
-            return CommonMethod.getReturnMessageError("文件大小不能超过50MB");
-        }
-        
-        // 校验文件类型
-        String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null) {
-            return CommonMethod.getReturnMessageError("文件名不能为空");
-        }
-        
-        String extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            return CommonMethod.getReturnMessageError("只支持PDF/PPT/Word格式的文件");
-        }
+        validateMultipartFile(file);
+        String originalFilename = Objects.requireNonNull(file.getOriginalFilename());
         
         // 获取表单数据
         Map<String, Object> form = dataRequest.getData();
@@ -105,7 +109,7 @@ public class CourseMaterialService {
         String description = CommonMethod.getString(form, "description");
         
         if (materialName == null || materialName.isEmpty()) {
-            return CommonMethod.getReturnMessageError("资料名称不能为空");
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "资料名称不能为空");
         }
         
         CourseMaterial material;
@@ -117,25 +121,28 @@ public class CourseMaterialService {
                 material = op.get();
                 
                 // 删除旧文件
-                if (material.getFilePath() != null && !material.getFilePath().isEmpty()) {
+                String oldStoredPath = material.getFilePath();
+                if (oldStoredPath != null && !oldStoredPath.isEmpty()) {
                     try {
-                        Files.deleteIfExists(Paths.get(material.getFilePath()));
+                        Path oldResolved = resolveFilePath(oldStoredPath);
+                        if (oldResolved != null) {
+                            Files.deleteIfExists(oldResolved);
+                        }
                     } catch (IOException e) {
-                        log.warn("删除旧文件失败: {}", material.getFilePath());
+                        log.warn("删除旧文件失败: {}", oldStoredPath);
                     }
                 }
             } else {
-                return CommonMethod.getReturnMessageError("资料不存在");
+                throw new BusinessException(ErrorCodes.COURSE_MATERIAL_NOT_FOUND, "资料不存在");
             }
         } else {
             material = new CourseMaterial();
             material.setUploadTime(LocalDateTime.now());
         }
         
-        // 保存文件
         String fileName = saveFile(file);
         if (fileName == null) {
-            return CommonMethod.getReturnMessageError("文件保存失败");
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_SAVE_FAILED, "文件保存失败");
         }
         
         // 设置资料信息
@@ -144,14 +151,14 @@ public class CourseMaterialService {
         material.setMaterialName(materialName);
         material.setCourseType(courseType);
         material.setFileName(originalFilename);
-        material.setFilePath(UPLOAD_DIR + fileName);
+        material.setFilePath(fileName);
         material.setFileSize(file.getSize());
         material.setDescription(description);
         material.setUploaderId(CommonMethod.getPersonId());
         material.setUploaderName(CommonMethod.getUsername());
-        
+
         courseMaterialRepository.save(material);
-        
+
         return CommonMethod.getReturnMessageOK();
     }
     
@@ -167,11 +174,15 @@ public class CourseMaterialService {
                 CourseMaterial material = op.get();
                 
                 // 删除文件
-                if (material.getFilePath() != null && !material.getFilePath().isEmpty()) {
+                String storedPath = material.getFilePath();
+                if (storedPath != null && !storedPath.isEmpty()) {
                     try {
-                        Files.deleteIfExists(Paths.get(material.getFilePath()));
+                        Path resolved = resolveFilePath(storedPath);
+                        if (resolved != null) {
+                            Files.deleteIfExists(resolved);
+                        }
                     } catch (IOException e) {
-                        log.warn("删除文件失败: {}", material.getFilePath());
+                        log.warn("删除文件失败: {}", storedPath);
                     }
                 }
                 
@@ -202,18 +213,18 @@ public class CourseMaterialService {
         }
         
         CourseMaterial material = op.get();
-        String filePath = material.getFilePath();
+        String storedPath = material.getFilePath();
         String fileName = material.getFileName();
-        
-        if (filePath == null || filePath.isEmpty()) {
+
+        if (storedPath == null || storedPath.isEmpty()) {
             log.warn("下载失败：文件路径为空 materialId={}", materialId);
             return ResponseEntity.notFound().build();
         }
-        
+
         try {
-            Path path = Paths.get(filePath);
-            if (!Files.exists(path)) {
-                log.warn("下载失败：文件不存在 filePath={}", filePath);
+            Path path = resolveFilePath(storedPath);
+            if (path == null || !Files.exists(path)) {
+                log.warn("下载失败：文件不存在 storedPath={}", storedPath);
                 return ResponseEntity.notFound().build();
             }
             
@@ -234,7 +245,7 @@ public class CourseMaterialService {
             
             return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
         } catch (IOException e) {
-            log.error("下载失败：读取文件异常 filePath={}", filePath, e);
+            log.error("下载失败：读取文件异常 storedPath={}", storedPath, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -274,54 +285,21 @@ public class CourseMaterialService {
     public DataResponse courseMaterialSaveBinary(byte[] fileData, String courseType, Integer courseId,
                                                   String fileName, String courseName, String materialName,
                                                   String description, String uploader) {
-        // 参数校验
-        if (fileData == null || fileData.length == 0) {
-            return CommonMethod.getReturnMessageError("文件不能为空");
-        }
+        validateBinaryUpload(fileData, courseType, courseId, fileName);
         
-        if (courseType == null || courseType.isEmpty()) {
-            return CommonMethod.getReturnMessageError("courseType不能为空，可选值：textbook/courseware/reference");
-        }
-        
-        if (courseId == null) {
-            return CommonMethod.getReturnMessageError("courseId不能为空");
-        }
-        
-        if (fileName == null || fileName.isEmpty()) {
-            return CommonMethod.getReturnMessageError("fileName不能为空");
-        }
-        
-        // 校验文件大小
-        if (fileData.length > MAX_FILE_SIZE) {
-            return CommonMethod.getReturnMessageError("文件大小不能超过50MB");
-        }
-        
-        // 校验文件类型
-        String extension = fileName.substring(fileName.lastIndexOf(".")).toLowerCase();
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            return CommonMethod.getReturnMessageError("只支持PDF/PPT/Word格式的文件，当前文件扩展名：" + extension);
-        }
-        
-        // 校验 courseType
-        Set<String> validCourseTypes = Set.of("textbook", "courseware", "reference");
-        if (!validCourseTypes.contains(courseType)) {
-            return CommonMethod.getReturnMessageError("courseType无效，可选值：textbook/courseware/reference");
-        }
-        
-        // 保存文件到本地
         String savedFileName = saveFileFromBytes(fileData, fileName);
         if (savedFileName == null) {
-            return CommonMethod.getReturnMessageError("文件保存失败");
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_SAVE_FAILED, "文件保存失败");
         }
         
         // 创建资料记录
         CourseMaterial material = new CourseMaterial();
         material.setCourseId(courseId);
-        material.setCourseName(courseName);
+        material.setCourseName(courseName != null && !courseName.isEmpty() ? courseName : null);
         material.setMaterialName(materialName != null && !materialName.isEmpty() ? materialName : fileName);
         material.setCourseType(courseType);
         material.setFileName(fileName);
-        material.setFilePath(UPLOAD_DIR + savedFileName);
+        material.setFilePath(savedFileName);
         material.setFileSize((long) fileData.length);
         material.setDescription(description);
         material.setUploadTime(LocalDateTime.now());
@@ -334,6 +312,55 @@ public class CourseMaterialService {
                 courseId, courseType, fileName, fileData.length);
         
         return CommonMethod.getReturnMessageOK();
+    }
+
+    private void validateMultipartFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件不能为空");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件大小不能超过50MB");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件名不能为空");
+        }
+        if (!originalFilename.contains(".")) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件扩展名不能为空");
+        }
+        String extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "只支持PDF/PPT/Word格式的文件");
+        }
+    }
+
+    private void validateBinaryUpload(byte[] fileData, String courseType, Integer courseId, String fileName) {
+        if (fileData == null || fileData.length == 0) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件不能为空");
+        }
+        if (courseType == null || courseType.isEmpty()) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "courseType不能为空，可选值：textbook/courseware/reference");
+        }
+        if (courseId == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "courseId不能为空");
+        }
+        if (fileName == null || fileName.isEmpty()) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "fileName不能为空");
+        }
+        if (!fileName.contains(".")) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件扩展名不能为空");
+        }
+        if (fileData.length > MAX_FILE_SIZE) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "文件大小不能超过50MB");
+        }
+        String extension = fileName.substring(fileName.lastIndexOf(".")).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(ErrorCodes.COURSE_MATERIAL_FILE_INVALID, "只支持PDF/PPT/Word格式的文件，当前文件扩展名：" + extension);
+        }
+        Set<String> validCourseTypes = Set.of("textbook", "courseware", "reference");
+        if (!validCourseTypes.contains(courseType)) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "courseType无效，可选值：textbook/courseware/reference");
+        }
     }
     
     /**
@@ -389,13 +416,29 @@ public class CourseMaterialService {
     }
     
     /**
+     * 根据 courseId 查找课程名称，若 material 中 courseName 已赋值则直接返回
+     */
+    private String resolveCourseName(CourseMaterial material) {
+        if (material.getCourseName() != null && !material.getCourseName().isEmpty()) {
+            return material.getCourseName();
+        }
+        if (material.getCourseId() != null) {
+            Optional<Course> course = courseRepository.findById(material.getCourseId());
+            if (course.isPresent()) {
+                return course.get().getName();
+            }
+        }
+        return "";
+    }
+
+    /**
      * 将 CourseMaterial 转换为 Map
      */
     private Map<String, Object> getMapFromMaterial(CourseMaterial material) {
         Map<String, Object> map = new HashMap<>();
         map.put("materialId", material.getMaterialId());
         map.put("courseId", material.getCourseId());
-        map.put("courseName", material.getCourseName());
+        map.put("courseName", resolveCourseName(material));
         map.put("materialName", material.getMaterialName());
         map.put("courseType", material.getCourseType());
         map.put("courseTypeName", getCourseTypeName(material.getCourseType()));

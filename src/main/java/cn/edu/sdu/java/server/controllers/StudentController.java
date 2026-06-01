@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.ConsumptionService;
@@ -28,6 +30,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/student")
 
+@Tag(name = "Student", description = "学生信息、课程资料、消费数据、成绩分析与简历相关接口")
 public class StudentController {
     private final StudentService studentService;
     private final CourseMaterialService courseMaterialService;
@@ -55,6 +58,7 @@ public class StudentController {
      */
 
 
+    @Operation(summary = "查询学生列表")
     @PostMapping("/getStudentList")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse getStudentList(@Valid @RequestBody DataRequest dataRequest) {
@@ -70,6 +74,7 @@ public class StudentController {
      * @return 正常操作
      */
 
+    @Operation(summary = "删除学生信息")
     @PostMapping("/studentDelete")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse studentDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -83,12 +88,14 @@ public class StudentController {
      * @return 根据personId从数据库中查出数据，存在Map对象里，并返回前端
      */
 
+    @Operation(summary = "查询学生详情")
     @PostMapping("/getStudentInfo")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse getStudentInfo(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.getStudentInfo(dataRequest);
     }
 
+    @Operation(summary = "按学生ID批量查询学生信息")
     @PostMapping("/getStudentByIds")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getStudentByIds(@Valid @RequestBody DataRequest dataRequest) {
@@ -103,6 +110,7 @@ public class StudentController {
      *
      * @return 新建修改学生的主键 student_id 返回前端
      */
+    @Operation(summary = "保存学生信息")
     @PostMapping("/studentEditSave")
     @PreAuthorize(" hasRole('ADMIN')")
     public DataResponse studentEditSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -119,6 +127,7 @@ public class StudentController {
      * @param personIdStr student 主键
      * @param fileName     前端上传的文件名
      */
+    @Operation(summary = "导入学生消费流水")
     @PostMapping(path = "/importFeeData")
     public DataResponse importFeeData(@RequestBody byte[] barr,
                                       @RequestParam(name = "uploader") String uploader,
@@ -131,6 +140,7 @@ public class StudentController {
      * getStudentListExcl 前端下载导出学生基本信息Excl表数据
      *
      */
+    @Operation(summary = "导出学生基本信息")
     @PostMapping("/getStudentListExcl")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public ResponseEntity<StreamingResponseBody> getStudentListExcl(@Valid @RequestBody DataRequest dataRequest) {
@@ -138,6 +148,7 @@ public class StudentController {
     }
 
 
+    @Operation(summary = "分页查询学生数据")
     @PostMapping("/getStudentPageData")
     @PreAuthorize(" hasRole('ADMIN')")
     public DataResponse getStudentPageData(@Valid @RequestBody DataRequest dataRequest) {
@@ -147,31 +158,60 @@ public class StudentController {
     /*
         FamilyMember
      */
+    @Operation(summary = "查询家庭成员列表")
     @PostMapping("/getFamilyMemberList")
-    @PreAuthorize(" hasRole('ADMIN') or  hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getFamilyMemberList(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.getFamilyMemberList(dataRequest);
     }
 
+    @Operation(summary = "保存家庭成员信息")
     @PostMapping("/familyMemberSave")
-    @PreAuthorize(" hasRole('ADMIN') or  hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse familyMemberSave(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.familyMemberSave(dataRequest);
     }
 
+    @Operation(summary = "删除家庭成员信息")
     @PostMapping("/familyMemberDelete")
-    @PreAuthorize(" hasRole('ADMIN') or  hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse familyMemberDelete(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.familyMemberDelete(dataRequest);
     }
 
+    /*
+        SocialRelation
+     */
+    @Operation(summary = "查询社会关系列表")
+    @PostMapping("/getSocialRelationList")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse getSocialRelationList(@Valid @RequestBody DataRequest dataRequest) {
+        return studentService.getSocialRelationList(dataRequest);
+    }
 
+    @Operation(summary = "保存社会关系信息")
+    @PostMapping("/socialRelationSave")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse socialRelationSave(@Valid @RequestBody DataRequest dataRequest) {
+        return studentService.socialRelationSave(dataRequest);
+    }
+
+    @Operation(summary = "删除社会关系信息")
+    @PostMapping("/socialRelationDelete")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse socialRelationDelete(@Valid @RequestBody DataRequest dataRequest) {
+        return studentService.socialRelationDelete(dataRequest);
+    }
+
+
+    @Operation(summary = "网页端导入消费流水")
     @PostMapping("/importFeeDataWeb")
     @PreAuthorize("hasRole('STUDENT')")
     public DataResponse importFeeDataWeb(@RequestParam Map<String,Object> request, @RequestParam("file") MultipartFile file) {
         return studentService.importFeeDataWeb(request, file);
     }
 
+    @Operation(summary = "查询学生个人简介")
     @PostMapping("/getStudentIntroduceData")
     @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN')")
     public DataResponse getStudentIntroduceData(@Valid @RequestBody DataRequest dataRequest) {
@@ -181,6 +221,7 @@ public class StudentController {
     /**
      * 获取学生个人画像数据(聚合基本信息、成绩、考勤、实践荣誉等)
      */
+    @Operation(summary = "获取学生个人画像数据(聚合基本信息、成绩、考勤、实践荣誉等)")
     @PostMapping("/getStudentPortrait")
     @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse getStudentPortrait(@Valid @RequestBody DataRequest dataRequest) {
@@ -192,6 +233,7 @@ public class StudentController {
     /**
      * 获取课程资料列表
      */
+    @Operation(summary = "获取课程资料列表")
     @PostMapping("/getCourseMaterialList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getCourseMaterialList(@Valid @RequestBody DataRequest dataRequest) {
@@ -202,6 +244,7 @@ public class StudentController {
      * 保存课程资料(包含文件上传) - multipart/form-data 方式
      * 权限控制：仅教师/管理员可上传
      */
+    @Operation(summary = "保存课程资料(包含文件上传) - multipart/form-data 方式")
     @PostMapping(value = "/courseMaterialSave", consumes = "multipart/form-data")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse courseMaterialSaveMultipart(@RequestParam Map<String, Object> request,
@@ -225,6 +268,7 @@ public class StudentController {
      * @param uploader      上传者（可选，从token获取）
      * @return DataResponse 包含code和msg
      */
+    @Operation(summary = "保存课程资料(文件上传) - application/octet-stream 方式")
     @PostMapping(value = "/courseMaterialSave", consumes = "application/octet-stream")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse courseMaterialSaveBinary(
@@ -243,6 +287,7 @@ public class StudentController {
     /**
      * 删除课程资料
      */
+    @Operation(summary = "删除课程资料")
     @PostMapping("/courseMaterialDelete")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse courseMaterialDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -254,6 +299,7 @@ public class StudentController {
      * 前端发送 POST 请求，请求体: {"materialId": 1}
      * 返回文件二进制数据（byte[]）
      */
+    @Operation(summary = "下载课程资料")
     @PostMapping("/courseMaterialDownload")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public ResponseEntity<byte[]> courseMaterialDownload(@Valid @RequestBody DataRequest dataRequest) {
@@ -265,6 +311,7 @@ public class StudentController {
     /**
      * 获取消费记录列表
      */
+    @Operation(summary = "获取消费记录列表")
     @PostMapping("/getConsumptionList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getConsumptionList(@Valid @RequestBody DataRequest dataRequest) {
@@ -274,6 +321,7 @@ public class StudentController {
     /**
      * 保存消费记录
      */
+    @Operation(summary = "保存消费记录")
     @PostMapping("/consumptionSave")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse consumptionSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -283,6 +331,7 @@ public class StudentController {
     /**
      * 删除消费记录
      */
+    @Operation(summary = "删除消费记录")
     @PostMapping("/consumptionDelete")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse consumptionDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -292,6 +341,7 @@ public class StudentController {
     /**
      * 获取月度消费统计
      */
+    @Operation(summary = "获取月度消费统计")
     @PostMapping("/getMonthlyConsumptionStats")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getMonthlyConsumptionStats(@Valid @RequestBody DataRequest dataRequest) {
@@ -301,6 +351,7 @@ public class StudentController {
     /**
      * Excel批量导入消费数据
      */
+    @Operation(summary = "Excel批量导入消费数据")
     @PostMapping("/importConsumptionData")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse importConsumptionData(@RequestParam Map<String, Object> request,
@@ -310,11 +361,32 @@ public class StudentController {
         return consumptionService.importConsumptionData(dataRequest, file);
     }
 
+    /**
+     * 获取消费账单列表（按月份分类统计）
+     */
+    @Operation(summary = "获取消费账单列表（按月份分类统计）")
+    @PostMapping("/getConsumptionBillList")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse getConsumptionBillList(@Valid @RequestBody DataRequest dataRequest) {
+        return consumptionService.getConsumptionBillList(dataRequest);
+    }
+
+    /**
+     * 检查异常消费（预警）
+     */
+    @Operation(summary = "检查异常消费（预警）")
+    @PostMapping("/checkAbnormalConsumption")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse checkAbnormalConsumption(@Valid @RequestBody DataRequest dataRequest) {
+        return consumptionService.checkAbnormalConsumption(dataRequest);
+    }
+
     // ==================== 综合绩分计算接口 ====================
 
     /**
      * 计算学生个人综合绩分
      */
+    @Operation(summary = "计算学生个人综合绩分")
     @PostMapping("/calculateStudentScore")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse calculateStudentScore(@Valid @RequestBody DataRequest dataRequest) {
@@ -340,6 +412,7 @@ public class StudentController {
     /**
      * 获取所有学生绩分排名
      */
+    @Operation(summary = "获取所有学生绩分排名")
     @PostMapping("/getScoreRanking")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse getScoreRanking(@Valid @RequestBody DataRequest dataRequest) {
@@ -349,6 +422,7 @@ public class StudentController {
     /**
      * 获取默认权重配置
      */
+    @Operation(summary = "获取默认权重配置")
     @PostMapping("/getDefaultWeights")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getDefaultWeights(@Valid @RequestBody DataRequest dataRequest) {
@@ -358,6 +432,7 @@ public class StudentController {
     /**
      * 保存自定义权重配置
      */
+    @Operation(summary = "保存自定义权重配置")
     @PostMapping("/saveWeightConfig")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse saveWeightConfig(@Valid @RequestBody DataRequest dataRequest) {
@@ -367,6 +442,7 @@ public class StudentController {
     /**
      * 批量计算所有学生绩分
      */
+    @Operation(summary = "批量计算所有学生绩分")
     @PostMapping("/batchCalculateAllScores")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse batchCalculateAllScores(@Valid @RequestBody DataRequest dataRequest) {
@@ -378,6 +454,7 @@ public class StudentController {
     /**
      * 生成个人简历（返回JSON数据供前端生成PDF）
      */
+    @Operation(summary = "生成个人简历（返回JSON数据供前端生成PDF）")
     @PostMapping("/generateResumePDF")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public ResponseEntity<org.springframework.core.io.Resource> generateResumePDF(@Valid @RequestBody DataRequest dataRequest) {
@@ -387,6 +464,7 @@ public class StudentController {
     /**
      * 预览简历数据（JSON格式）
      */
+    @Operation(summary = "预览简历数据（JSON格式）")
     @PostMapping("/previewResumeData")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse previewResumeData(@Valid @RequestBody DataRequest dataRequest) {

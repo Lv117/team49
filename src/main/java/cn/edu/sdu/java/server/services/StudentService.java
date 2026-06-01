@@ -34,7 +34,6 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.*;
-import java.util.List;
 
 @Service
 public class StudentService {
@@ -46,12 +45,14 @@ public class StudentService {
     private final PasswordEncoder encoder;  //密码服务自动注入
     private final FeeRepository feeRepository;  //消费数据操作自动注入
     private final FamilyMemberRepository familyMemberRepository;
+    private final SocialRelationRepository socialRelationRepository;
     private final SystemService systemService;
     private final ScoreRepository scoreRepository;
     private final DevelopmentRepository developmentRepository;
     private final AttendanceRepository attendanceRepository;
-    
-    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SystemService systemService, ScoreRepository scoreRepository, DevelopmentRepository developmentRepository, AttendanceRepository attendanceRepository) {
+    private final TeacherDataScopeService teacherDataScopeService;
+
+    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SocialRelationRepository socialRelationRepository, SystemService systemService, ScoreRepository scoreRepository, DevelopmentRepository developmentRepository, AttendanceRepository attendanceRepository, TeacherDataScopeService teacherDataScopeService) {
         this.personRepository = personRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -59,10 +60,12 @@ public class StudentService {
         this.encoder = encoder;
         this.feeRepository = feeRepository;
         this.familyMemberRepository = familyMemberRepository;
+        this.socialRelationRepository = socialRelationRepository;
         this.systemService = systemService;
         this.scoreRepository = scoreRepository;
         this.developmentRepository = developmentRepository;
         this.attendanceRepository = attendanceRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
     }
 
     public Map<String,Object> getMapFromStudent(Student s) {
@@ -118,16 +121,13 @@ public class StudentService {
     public DataResponse studentDelete(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         if (personId == null || personId <= 0) {
-            return CommonMethod.getReturnMessageError("personId不能为空");
+            throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "personId不能为空");
         }
-        Optional<Student> op = studentRepository.findById(personId);
-        if (op.isEmpty()) {
-            return CommonMethod.getReturnMessageError("学生不存在");
-        }
-        Student s = op.get();
+        Student s = studentRepository.findById(personId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生不存在"));
         Person p = s.getPerson();
         if (p == null) {
-            return CommonMethod.getReturnMessageError("人员信息不存在");
+            throw new BusinessException(ErrorCodes.STUDENT_DATA_INCOMPLETE, "人员信息不存在");
         }
         // 删除顺序：先删 student → 再删 user → 最后删 person
         studentRepository.delete(s);
@@ -180,11 +180,14 @@ public class StudentService {
         }
         for (Integer personId : personIdSet) {
             Optional<Student> op = studentRepository.findById(personId);
-            if (op.isEmpty() || op.get().getPerson() == null) {
+            if (op.isEmpty()) {
                 continue;
             }
             Student s = op.get();
             Person p = s.getPerson();
+            if (p == null) {
+                continue;
+            }
             Map<String, Object> m = new HashMap<>();
             m.put("personId", s.getPersonId());
             m.put("num", p.getNum());
@@ -386,6 +389,9 @@ public class StudentService {
         Map<String,Object> m;
         Course c;
         for (Score s : sList) {
+            if (s == null || s.getStudent() == null || s.getStudent().getPerson() == null || s.getCourse() == null) {
+                continue;
+            }
             m = new HashMap<>();
             c = s.getCourse();
             m.put("studentNum", s.getStudent().getPerson().getNum());
@@ -439,7 +445,6 @@ public class StudentService {
         if (sList == null || sList.isEmpty())
             return list;
         Map<String,Object> m;
-        Course c;
         for (Fee s : sList) {
             m = new HashMap<>();
             m.put("title", s.getDay());
@@ -514,11 +519,10 @@ public class StudentService {
         String numName = dataRequest.getString("numName");
         List<Map<String,Object>> list = getStudentMapList(numName);
         Integer[] widths = {8, 20, 10, 15, 15, 15, 25, 10, 15, 30, 20, 30};
-        int i, j, k;
+        int i, j;
         String[] titles = {"序号", "学号", "姓名", "学院", "专业", "班级", "证件号码", "性别", "出生日期", "邮箱", "电话", "地址"};
         String outPutSheetName = "student.xlsx";
         XSSFWorkbook wb = new XSSFWorkbook();
-        XSSFCellStyle styleTitle = CommonMethod.createCellStyle(wb, 20);
         XSSFSheet sheet = wb.createSheet(outPutSheetName);
         for (j = 0; j < widths.length; j++) {
             sheet.setColumnWidth(j, widths[j] * 256);
@@ -603,6 +607,8 @@ public class StudentService {
      */
     public DataResponse getFamilyMemberList(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
+        personId = resolveOwnedStudentPersonId(personId);
+        teacherDataScopeService.restrictStudentIdForTeacher(personId);
         List<FamilyMember> fList = familyMemberRepository.findByStudentPersonId(personId);
         List<Map<String,Object>> dataList = new ArrayList<>();
         Map<String,Object> m;
@@ -626,18 +632,31 @@ public class StudentService {
         Map<String,Object> form = dataRequest.getMap("form");
         Integer personId = CommonMethod.getInteger(form,"personId");
         Integer memberId = CommonMethod.getInteger(form,"memberId");
+        personId = resolveOwnedStudentPersonId(personId);
+        teacherDataScopeService.restrictStudentIdForTeacher(personId);
         Optional<FamilyMember> op;
         FamilyMember f = null;
         if(memberId != null) {
             op = familyMemberRepository.findById(memberId);
             if(op.isPresent()) {
                 f = op.get();
+                assertStudentOwnsRecord(f.getStudent() == null ? null : f.getStudent().getPersonId());
+                teacherDataScopeService.assertCurrentTeacherAccessStudent(
+                        f.getStudent() == null ? null : f.getStudent().getPersonId(),
+                        "教师仅可维护本人授课学生的家庭成员信息");
+                if (personId == null && f.getStudent() != null) {
+                    personId = f.getStudent().getPersonId();
+                }
             }
         }
         if(f== null) {
             f = new FamilyMember();
-            assert personId != null;
-            f.setStudent(studentRepository.findById(personId).get());
+            if (personId == null || personId <= 0) {
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生ID不能为空");
+            }
+            Student student = studentRepository.findById(personId)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生不存在"));
+            f.setStudent(student);
         }
         f.setRelation(CommonMethod.getString(form,"relation"));
         f.setName(CommonMethod.getString(form,"name"));
@@ -652,8 +671,116 @@ public class StudentService {
         Integer memberId = dataRequest.getInteger("memberId");
         Optional<FamilyMember> op;
         op = familyMemberRepository.findById(memberId);
-        op.ifPresent(familyMemberRepository::delete);
+        if (op.isPresent()) {
+            FamilyMember familyMember = op.get();
+            assertStudentOwnsRecord(familyMember.getStudent() == null ? null : familyMember.getStudent().getPersonId());
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(
+                    familyMember.getStudent() == null ? null : familyMember.getStudent().getPersonId(),
+                    "教师仅可删除本人授课学生的家庭成员信息");
+            familyMemberRepository.delete(familyMember);
+        }
         return CommonMethod.getReturnMessageOK();
+    }
+
+    /*
+        SocialRelation
+     */
+    public DataResponse getSocialRelationList(DataRequest dataRequest) {
+        Integer personId = dataRequest.getInteger("personId");
+        personId = resolveOwnedStudentPersonId(personId);
+        teacherDataScopeService.restrictStudentIdForTeacher(personId);
+        List<SocialRelation> sList = socialRelationRepository.findByStudentPersonId(personId);
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        if (sList != null) {
+            for (SocialRelation s : sList) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("relationId", s.getRelationId());
+                m.put("personId", s.getStudent().getPersonId());
+                m.put("relationType", s.getRelationType());
+                m.put("name", s.getName());
+                m.put("gender", s.getGender());
+                m.put("phone", s.getPhone());
+                m.put("age", s.getAge() == null ? "" : s.getAge().toString());
+                m.put("remark", s.getRemark());
+                dataList.add(m);
+            }
+        }
+        return CommonMethod.getReturnData(dataList);
+    }
+
+    public DataResponse socialRelationSave(DataRequest dataRequest) {
+        Map<String,Object> form = dataRequest.getMap("form");
+        Integer personId = CommonMethod.getInteger(form,"personId");
+        Integer relationId = CommonMethod.getInteger(form,"relationId");
+        personId = resolveOwnedStudentPersonId(personId);
+        teacherDataScopeService.restrictStudentIdForTeacher(personId);
+        Optional<SocialRelation> op;
+        SocialRelation s = null;
+        if(relationId != null) {
+            op = socialRelationRepository.findById(relationId);
+            if(op.isPresent()) {
+                s = op.get();
+                assertStudentOwnsRecord(s.getStudent() == null ? null : s.getStudent().getPersonId());
+                teacherDataScopeService.assertCurrentTeacherAccessStudent(
+                        s.getStudent() == null ? null : s.getStudent().getPersonId(),
+                        "教师仅可维护本人授课学生的社会关系信息");
+                if (personId == null && s.getStudent() != null) {
+                    personId = s.getStudent().getPersonId();
+                }
+            }
+        }
+        if(s== null) {
+            s = new SocialRelation();
+            if (personId == null || personId <= 0) {
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生ID不能为空");
+            }
+            Student student = studentRepository.findById(personId)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生不存在"));
+            s.setStudent(student);
+        }
+        s.setRelationType(CommonMethod.getString(form,"relationType"));
+        s.setName(CommonMethod.getString(form,"name"));
+        s.setGender(CommonMethod.getString(form,"gender"));
+        s.setPhone(CommonMethod.getString(form,"phone"));
+        s.setAge(CommonMethod.getInteger(form,"age"));
+        s.setRemark(CommonMethod.getString(form,"remark"));
+        socialRelationRepository.save(s);
+        return CommonMethod.getReturnMessageOK();
+    }
+
+    public DataResponse socialRelationDelete(DataRequest dataRequest) {
+        Integer relationId = dataRequest.getInteger("relationId");
+        Optional<SocialRelation> op;
+        op = socialRelationRepository.findById(relationId);
+        if (op.isPresent()) {
+            SocialRelation socialRelation = op.get();
+            assertStudentOwnsRecord(socialRelation.getStudent() == null ? null : socialRelation.getStudent().getPersonId());
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(
+                    socialRelation.getStudent() == null ? null : socialRelation.getStudent().getPersonId(),
+                    "教师仅可删除本人授课学生的社会关系信息");
+            socialRelationRepository.delete(socialRelation);
+        }
+        return CommonMethod.getReturnMessageOK();
+    }
+
+    private Integer resolveOwnedStudentPersonId(Integer personId) {
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || currentPersonId <= 0) {
+                throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+            }
+            return currentPersonId;
+        }
+        return personId;
+    }
+
+    private void assertStudentOwnsRecord(Integer ownerPersonId) {
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || !currentPersonId.equals(ownerPersonId)) {
+                throw new BusinessException(ErrorCodes.ACCESS_DENIED, "学生只能操作自己的数据");
+            }
+        }
     }
 
 
@@ -681,7 +808,7 @@ public class StudentService {
             sOp = studentRepository.findById(personId);  // 根据personId查询获得 Student对象
         }
         if (sOp.isEmpty())
-            return CommonMethod.getReturnMessageError("学生不存在！");
+            throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生不存在");
         Student s = sOp.get();
         Map<String,Object> info = getMapFromStudent(s);  // 查询学生信息Map对象
         List<Score> sList = scoreRepository.findByStudentPersonId(s.getPersonId()); //获得学生成绩对象集合
@@ -709,8 +836,9 @@ public class StudentService {
         }
         
         if (studentId == null || studentId <= 0) {
-            return CommonMethod.getReturnMessageError("学生ID不能为空");
+            throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生ID不能为空");
         }
+        teacherDataScopeService.assertCurrentTeacherAccessStudent(studentId, "教师仅可查看本人授课学生的画像数据");
         
         Map<String, Object> portrait = new HashMap<>();
         
@@ -720,7 +848,7 @@ public class StudentService {
             Student student = sOp.get();
             portrait.put("basicInfo", getMapFromStudent(student));
         } else {
-            return CommonMethod.getReturnMessageError("学生不存在");
+            throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "学生不存在");
         }
         
         // 2. 成绩雷达图数据(按课程统计平均分)

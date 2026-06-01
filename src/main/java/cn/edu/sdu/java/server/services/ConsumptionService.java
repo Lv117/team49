@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.Fee;
 import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
@@ -29,10 +31,14 @@ public class ConsumptionService {
     
     private final FeeRepository feeRepository;
     private final StudentRepository studentRepository;
+    private final TeacherDataScopeService teacherDataScopeService;
     
-    public ConsumptionService(FeeRepository feeRepository, StudentRepository studentRepository) {
+    public ConsumptionService(FeeRepository feeRepository,
+                              StudentRepository studentRepository,
+                              TeacherDataScopeService teacherDataScopeService) {
         this.feeRepository = feeRepository;
         this.studentRepository = studentRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
     }
     
     /**
@@ -43,6 +49,7 @@ public class ConsumptionService {
         if (personId == null || personId <= 0) {
             personId = dataRequest.getInteger("studentId");
         }
+        personId = resolveStudentIdForQuery(personId, "教师仅可查看本人授课学生的消费记录");
         String consumptionType = dataRequest.getString("consumptionType");
         String keyword = dataRequest.getString("keyword");
         String month = dataRequest.getString("month");
@@ -57,6 +64,7 @@ public class ConsumptionService {
         }
         
         List<Fee> feeList = feeRepository.findByConditions(personId, consumptionType, keyword);
+        feeList = filterFeesForTeacher(feeList);
         
         List<Map<String, Object>> dataList = new ArrayList<>();
         for (Fee fee : feeList) {
@@ -90,6 +98,7 @@ public class ConsumptionService {
         if (personId == null || personId <= 0) {
             personId = CommonMethod.getInteger(form, "studentId");
         }
+        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可维护本人授课学生的消费记录");
         String consumptionType = CommonMethod.getString(form, "consumptionType");
         Double money = CommonMethod.getDouble(form, "money");
         if (money == null || money <= 0) {
@@ -106,17 +115,14 @@ public class ConsumptionService {
             description = CommonMethod.getString(form, "remark");
         }
         
-        if (personId == null || personId <= 0) {
-            return CommonMethod.getReturnMessageError("学生ID不能为空");
-        }
         if (consumptionType == null || consumptionType.isEmpty()) {
-            return CommonMethod.getReturnMessageError("消费类型不能为空");
+            throw new BusinessException(ErrorCodes.CONSUMPTION_TYPE_REQUIRED, "消费类型不能为空");
         }
         if (money == null || money <= 0) {
-            return CommonMethod.getReturnMessageError("消费金额必须大于0");
+            throw new BusinessException(ErrorCodes.CONSUMPTION_AMOUNT_INVALID, "消费金额必须大于0");
         }
         if (day == null || day.isEmpty()) {
-            return CommonMethod.getReturnMessageError("消费日期不能为空");
+            throw new BusinessException(ErrorCodes.CONSUMPTION_DATE_REQUIRED, "消费日期不能为空");
         }
         
         Fee fee;
@@ -126,8 +132,9 @@ public class ConsumptionService {
             Optional<Fee> op = feeRepository.findById(feeId);
             if (op.isPresent()) {
                 fee = op.get();
+                assertStudentAccessible(getStudentId(fee), "教师仅可维护本人授课学生的消费记录");
             } else {
-                return CommonMethod.getReturnMessageError("消费记录不存在");
+                throw new BusinessException(ErrorCodes.CONSUMPTION_NOT_FOUND, "消费记录不存在");
             }
         } else {
             fee = new Fee();
@@ -135,7 +142,7 @@ public class ConsumptionService {
             if (studentOp.isPresent()) {
                 fee.setStudent(studentOp.get());
             } else {
-                return CommonMethod.getReturnMessageError("学生不存在");
+                throw new BusinessException(ErrorCodes.CONSUMPTION_STUDENT_NOT_FOUND, "学生不存在");
             }
         }
         
@@ -154,12 +161,13 @@ public class ConsumptionService {
      */
     public DataResponse consumptionDelete(DataRequest dataRequest) {
         Integer feeId = dataRequest.getInteger("feeId");
-        
-        if (feeId != null && feeId > 0) {
-            Optional<Fee> op = feeRepository.findById(feeId);
-            op.ifPresent(feeRepository::delete);
+        if (feeId == null || feeId <= 0) {
+            throw new BusinessException(ErrorCodes.CONSUMPTION_ID_REQUIRED, "消费记录ID不能为空");
         }
-        
+        Fee fee = feeRepository.findById(feeId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.CONSUMPTION_NOT_FOUND, "消费记录不存在"));
+        assertStudentAccessible(getStudentId(fee), "教师仅可删除本人授课学生的消费记录");
+        feeRepository.delete(fee);
         return CommonMethod.getReturnMessageOK();
     }
     
@@ -168,11 +176,9 @@ public class ConsumptionService {
      */
     public DataResponse getMonthlyConsumptionStats(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
+        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可查看本人授课学生的月度消费统计");
         String yearMonth = dataRequest.getString("yearMonth");
         
-        if (personId == null || personId <= 0) {
-            return CommonMethod.getReturnMessageError("学生ID不能为空");
-        }
         if (yearMonth == null || yearMonth.isEmpty()) {
             // 默认当前月份
             yearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
@@ -221,20 +227,17 @@ public class ConsumptionService {
      */
     public DataResponse importConsumptionData(DataRequest dataRequest, MultipartFile file) {
         Integer personId = CommonMethod.getInteger(dataRequest.getData(), "personId");
-        String uploader = CommonMethod.getString(dataRequest.getData(), "uploader");
+        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可导入本人授课学生的消费数据");
         
-        if (personId == null || personId <= 0) {
-            return CommonMethod.getReturnMessageError("学生ID不能为空");
-        }
         if (file == null || file.isEmpty()) {
-            return CommonMethod.getReturnMessageError("文件不能为空");
+            throw new BusinessException(ErrorCodes.CONSUMPTION_FILE_EMPTY, "文件不能为空");
         }
         
         try (InputStream inputStream = file.getInputStream()) {
             return importFromExcel(inputStream, personId);
         } catch (IOException e) {
             log.error("导入消费数据失败", e);
-            return CommonMethod.getReturnMessageError("导入失败: " + e.getMessage());
+            throw new BusinessException(ErrorCodes.CONSUMPTION_IMPORT_FAILED, "导入失败，请检查文件内容或稍后重试");
         }
     }
     
@@ -248,7 +251,7 @@ public class ConsumptionService {
             
             Optional<Student> studentOp = studentRepository.findById(personId);
             if (studentOp.isEmpty()) {
-                return CommonMethod.getReturnMessageError("学生不存在");
+                throw new BusinessException(ErrorCodes.CONSUMPTION_STUDENT_NOT_FOUND, "学生不存在");
             }
             Student student = studentOp.get();
             
@@ -309,7 +312,7 @@ public class ConsumptionService {
             return CommonMethod.getReturnData(result);
         } catch (IOException e) {
             log.error("读取Excel文件失败", e);
-            return CommonMethod.getReturnMessageError("读取Excel文件失败: " + e.getMessage());
+            throw new BusinessException(ErrorCodes.CONSUMPTION_IMPORT_FAILED, "读取Excel文件失败，请检查文件格式");
         }
     }
     
@@ -376,6 +379,157 @@ public class ConsumptionService {
     }
     
     /**
+     * 获取消费账单列表（按月份分类统计）
+     */
+    public DataResponse getConsumptionBillList(DataRequest dataRequest) {
+        Integer personId = dataRequest.getInteger("personId");
+        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可查看本人授课学生的消费账单");
+        String yearMonth = dataRequest.getString("yearMonth");
+        
+        if (yearMonth == null || yearMonth.isEmpty()) {
+            yearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        }
+        
+        // 获取该月份的所有消费记录
+        String startDate = yearMonth + "-01";
+        String endDate = yearMonth + "-31";
+        
+        List<Fee> feeList = feeRepository.findByStudentAndDateRange(personId, startDate, endDate);
+        
+        // 按消费类型分类统计
+        Map<String, Object> billData = new LinkedHashMap<>();
+        Map<String, Double> typeStats = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> typeDetails = new LinkedHashMap<>();
+        
+        String[] types = {"dining", "study", "transport", "life", "entertainment"};
+        String[] typeNames = {"餐饮消费", "学习用品", "交通费", "生活用品", "娱乐消费"};
+        
+        double totalAmount = 0;
+        
+        for (int i = 0; i < types.length; i++) {
+            final int index = i;
+            String type = types[index];
+            String typeName = typeNames[index];
+            
+            List<Fee> typeFees = feeList.stream()
+                    .filter(f -> type.equals(f.getConsumptionType()))
+                    .toList();
+            
+            double typeTotal = typeFees.stream().mapToDouble(Fee::getMoney).sum();
+            typeStats.put(typeName, typeTotal);
+            totalAmount += typeTotal;
+            
+            // 收集该类型的详细记录
+            List<Map<String, Object>> details = new ArrayList<>();
+            for (Fee fee : typeFees) {
+                details.add(getMapFromFee(fee));
+            }
+            typeDetails.put(typeName, details);
+        }
+        
+        billData.put("yearMonth", yearMonth);
+        billData.put("totalAmount", totalAmount);
+        billData.put("typeStats", typeStats);
+        billData.put("typeDetails", typeDetails);
+        
+        return CommonMethod.getReturnData(billData);
+    }
+    
+    /**
+     * 检查异常消费（预警）
+     */
+    public DataResponse checkAbnormalConsumption(DataRequest dataRequest) {
+        Integer personId = dataRequest.getInteger("personId");
+        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可查看本人授课学生的消费预警");
+        Double singleThreshold = dataRequest.getDouble("singleThreshold"); // 单笔超过阈值
+        Double dailyThreshold = dataRequest.getDouble("dailyThreshold");   // 单日消费过高
+        Double frequencyThreshold = dataRequest.getDouble("frequencyThreshold"); // 消费频率异常
+        
+        // 默认阈值
+        if (singleThreshold == null || singleThreshold <= 0) {
+            singleThreshold = 500.0; // 单笔超过500元
+        }
+        if (dailyThreshold == null || dailyThreshold <= 0) {
+            dailyThreshold = 1000.0; // 单日超过1000元
+        }
+        if (frequencyThreshold == null || frequencyThreshold <= 0) {
+            frequencyThreshold = 10.0; // 单日消费次数超过10次
+        }
+        
+        List<Fee> allFees = feeRepository.findByStudentId(personId);
+        List<Map<String, Object>> abnormalList = new ArrayList<>();
+        
+        // 检查单笔超过阈值
+        for (Fee fee : allFees) {
+            if (fee.getMoney() > singleThreshold) {
+                Map<String, Object> abnormal = new HashMap<>();
+                abnormal.put("type", "单笔超额");
+                abnormal.put("fee", getMapFromFee(fee));
+                abnormal.put("threshold", singleThreshold);
+                abnormal.put("amount", fee.getMoney());
+                abnormal.put("excess", fee.getMoney() - singleThreshold);
+                abnormalList.add(abnormal);
+            }
+        }
+        
+        // 检查单日消费过高
+        Map<String, Double> dailyStats = new HashMap<>();
+        Map<String, List<Fee>> dailyFees = new HashMap<>();
+        
+        for (Fee fee : allFees) {
+            String day = fee.getDay();
+            dailyStats.put(day, dailyStats.getOrDefault(day, 0.0) + fee.getMoney());
+            dailyFees.computeIfAbsent(day, k -> new ArrayList<>()).add(fee);
+        }
+        
+        for (Map.Entry<String, Double> entry : dailyStats.entrySet()) {
+            if (entry.getValue() > dailyThreshold) {
+                Map<String, Object> abnormal = new HashMap<>();
+                abnormal.put("type", "单日超额");
+                abnormal.put("day", entry.getKey());
+                abnormal.put("threshold", dailyThreshold);
+                abnormal.put("totalAmount", entry.getValue());
+                abnormal.put("excess", entry.getValue() - dailyThreshold);
+                abnormal.put("count", dailyFees.get(entry.getKey()).size());
+                abnormal.put("details", dailyFees.get(entry.getKey()).stream()
+                        .map(this::getMapFromFee).toList());
+                abnormalList.add(abnormal);
+            }
+        }
+        
+        // 检查消费频率异常
+        Map<String, Integer> frequencyStats = new HashMap<>();
+        for (Fee fee : allFees) {
+            String day = fee.getDay();
+            frequencyStats.put(day, frequencyStats.getOrDefault(day, 0) + 1);
+        }
+        
+        for (Map.Entry<String, Integer> entry : frequencyStats.entrySet()) {
+            if (entry.getValue() > frequencyThreshold) {
+                Map<String, Object> abnormal = new HashMap<>();
+                abnormal.put("type", "频率异常");
+                abnormal.put("day", entry.getKey());
+                abnormal.put("threshold", frequencyThreshold);
+                abnormal.put("frequency", entry.getValue());
+                abnormal.put("details", dailyFees.get(entry.getKey()).stream()
+                        .map(this::getMapFromFee).toList());
+                abnormalList.add(abnormal);
+            }
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("abnormalCount", abnormalList.size());
+        result.put("abnormalList", abnormalList);
+        result.put("thresholds", Map.of(
+                "singleThreshold", singleThreshold,
+                "dailyThreshold", dailyThreshold,
+                "frequencyThreshold", frequencyThreshold
+        ));
+        
+        return CommonMethod.getReturnData(result);
+    }
+    
+    /**
      * 获取消费类型名称
      */
     private String getConsumptionTypeName(String consumptionType) {
@@ -390,5 +544,54 @@ public class ConsumptionService {
             case "entertainment" -> "娱乐消费";
             default -> "其他";
         };
+    }
+
+    private Integer resolveStudentIdForQuery(Integer studentId, String teacherMessage) {
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || currentPersonId <= 0) {
+                throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+            }
+            return currentPersonId;
+        }
+        if (studentId != null && studentId > 0) {
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(studentId, teacherMessage);
+        }
+        return studentId;
+    }
+
+    private Integer resolveRequiredStudentId(Integer studentId, String emptyMessage, String teacherMessage) {
+        Integer resolvedStudentId = resolveStudentIdForQuery(studentId, teacherMessage);
+        if (resolvedStudentId == null || resolvedStudentId <= 0) {
+            throw new BusinessException(ErrorCodes.CONSUMPTION_STUDENT_REQUIRED, emptyMessage);
+        }
+        return resolvedStudentId;
+    }
+
+    private void assertStudentAccessible(Integer studentId, String teacherMessage) {
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || currentPersonId <= 0) {
+                throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+            }
+            if (!currentPersonId.equals(studentId)) {
+                throw new BusinessException(ErrorCodes.ACCESS_DENIED, "学生只能操作自己的消费数据");
+            }
+        }
+        teacherDataScopeService.assertCurrentTeacherAccessStudent(studentId, teacherMessage);
+    }
+
+    private Integer getStudentId(Fee fee) {
+        return fee == null || fee.getStudent() == null ? null : fee.getStudent().getPersonId();
+    }
+
+    private List<Fee> filterFeesForTeacher(List<Fee> feeList) {
+        if (!teacherDataScopeService.isCurrentRoleTeacher()) {
+            return feeList;
+        }
+        Set<Integer> studentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+        return feeList.stream()
+                .filter(fee -> studentIds.contains(getStudentId(fee)))
+                .toList();
     }
 }

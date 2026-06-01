@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.ApprovalRecord;
 import cn.edu.sdu.java.server.models.StudentDevelopment;
 import cn.edu.sdu.java.server.models.Student;
@@ -35,7 +37,7 @@ public class DevelopmentService {
         this.teacherDataScopeService = teacherDataScopeService;
     }
 
-    // ==================== 统一类型路由 ====================
+    // ==================== 统一发展记录入口 ====================
 
     /**
      * 保存发展记录(荣誉/创新/竞赛/成果)
@@ -52,12 +54,11 @@ public class DevelopmentService {
         Integer id = CommonMethod.getInteger(form, "id");
         String developmentType = CommonMethod.getString(form, "developmentType");
 
-        // 校验类型
         if (developmentType == null || developmentType.isEmpty()) {
-            return CommonMethod.getReturnMessageError("类型不能为空");
+            throw new BusinessException(ErrorCodes.DEVELOPMENT_TYPE_INVALID, "发展记录类型不能为空");
         }
         if (!isValidType(developmentType)) {
-            return CommonMethod.getReturnMessageError("不支持的类型: " + developmentType);
+            throw new BusinessException(ErrorCodes.DEVELOPMENT_TYPE_INVALID, "不支持的发展记录类型: " + developmentType);
         }
 
         StudentDevelopment development = null;
@@ -82,11 +83,11 @@ public class DevelopmentService {
         if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
             Integer currentStudentId = CommonMethod.getPersonId();
             if (currentStudentId == null) {
-                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "未识别到当前学生身份，无法保存");
             }
             Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
             if (sop.isEmpty() || sop.get().getPerson() == null) {
-                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "当前学生信息不存在，无法保存");
             }
             studentId = currentStudentId;
             studentName = sop.get().getPerson().getName();
@@ -271,27 +272,24 @@ public class DevelopmentService {
         String approvalOpinion = dataRequest.getString("approvalOpinion");
 
         if (id == null || id <= 0) {
-            return CommonMethod.getReturnMessageError("ID不能为空");
+            throw new BusinessException(ErrorCodes.DEVELOPMENT_NOT_FOUND, "发展记录ID不能为空");
         }
         if (status == null || status.isEmpty()) {
-            return CommonMethod.getReturnMessageError("目标状态不能为空");
+            throw new BusinessException(ErrorCodes.DEVELOPMENT_STATUS_INVALID, "目标状态不能为空");
         }
 
-        Optional<StudentDevelopment> op = developmentRepository.findById(id);
-        if (op.isEmpty()) {
-            return CommonMethod.getReturnMessageError("记录不存在");
-        }
-
-        StudentDevelopment development = op.get();
+        StudentDevelopment development = developmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.DEVELOPMENT_NOT_FOUND, "发展记录不存在"));
         if (teacherDataScopeService.isCurrentRoleTeacher()
                 && !teacherDataScopeService.canCurrentTeacherAccessStudent(development.getStudentId())) {
-            return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
         }
         String currentStatus = development.getStatus();
 
-        // 状态机校验
+        // 统一发展记录虽然聚合了多种成果，但审批仍要遵循同一套状态机规则。
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
-            return CommonMethod.getReturnMessageError(
+            throw new BusinessException(
+                    ErrorCodes.DEVELOPMENT_STATUS_INVALID,
                     ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
         }
 
@@ -302,7 +300,6 @@ public class DevelopmentService {
         development.setUpdateTime(LocalDateTime.now());
         developmentRepository.save(development);
 
-        // 保存审批记录
         ApprovalRecord record = new ApprovalRecord();
         record.setBusinessType("development_" + development.getDevelopmentType());
         record.setBusinessId(development.getId());
@@ -424,7 +421,7 @@ public class DevelopmentService {
         map.put("createTime", development.getCreateTime());
         map.put("updateTime", development.getUpdateTime());
 
-        // 将extraInfo中的字段展开到顶层,方便前端使用
+        // 展开扩展字段，保持前端兼容现有扁平化取值方式。
         if (development.getExtraInfo() != null) {
             map.putAll(development.getExtraInfo());
         }

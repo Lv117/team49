@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.CourseTeachingService;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/courseTeaching")
+@Tag(name = "Course Teaching", description = "Teaching assignment APIs")
 public class CourseTeachingController {
     private final CourseTeachingService courseTeachingService;
 
@@ -24,6 +27,7 @@ public class CourseTeachingController {
     /**
      * 获取任课安排列表（管理员使用）
      */
+    @Operation(summary = "获取任课安排列表（管理员使用）")
     @PostMapping("/getCourseTeachingList")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse getCourseTeachingList(@Valid @RequestBody DataRequest dataRequest) {
@@ -33,6 +37,7 @@ public class CourseTeachingController {
     /**
      * 保存任课安排（管理员使用）
      */
+    @Operation(summary = "保存任课安排（管理员使用）")
     @PostMapping("/courseTeachingSave")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse courseTeachingSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -42,6 +47,7 @@ public class CourseTeachingController {
     /**
      * 删除任课安排（管理员使用）
      */
+    @Operation(summary = "删除任课安排（管理员使用）")
     @PostMapping("/courseTeachingDelete")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse courseTeachingDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -51,6 +57,7 @@ public class CourseTeachingController {
     /**
      * 获取教师任课安排（教师端使用）
      */
+    @Operation(summary = "获取教师任课安排（教师端使用）")
     @PostMapping("/getTeacherCourseList")
     public DataResponse getTeacherCourseList(@Valid @RequestBody DataRequest dataRequest) {
         return courseTeachingService.getTeacherCourseList(dataRequest);

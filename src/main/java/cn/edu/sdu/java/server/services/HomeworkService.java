@@ -14,6 +14,7 @@ import cn.edu.sdu.java.server.util.CommonMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -158,6 +159,7 @@ public class HomeworkService {
     /**
      * 删除作业
      */
+    @Transactional
     public DataResponse homeworkDelete(DataRequest dataRequest) {
         try {
             Integer homeworkId = dataRequest.getInteger("homeworkId");
@@ -169,12 +171,38 @@ public class HomeworkService {
                 return CommonMethod.getReturnMessageError("作业不存在");
             }
 
+            // 先删除该作业的所有提交记录，再删除作业本身
+            homeworkSubmissionRepository.deleteByHomeworkHomeworkId(homeworkId);
             homeworkRepository.deleteById(homeworkId);
 
             return CommonMethod.getReturnMessageOK("删除成功");
         } catch (Exception e) {
             log.error("删除作业失败", e);
             return CommonMethod.getReturnMessageError("删除作业失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除学生作业提交记录
+     */
+    @Transactional
+    public DataResponse submissionDelete(DataRequest dataRequest) {
+        try {
+            Integer submissionId = dataRequest.getInteger("submissionId");
+            if (submissionId == null) {
+                return CommonMethod.getReturnMessageError("提交记录 ID 不能为空");
+            }
+
+            if (!homeworkSubmissionRepository.existsById(submissionId)) {
+                return CommonMethod.getReturnMessageError("提交记录不存在");
+            }
+
+            homeworkSubmissionRepository.deleteById(submissionId);
+
+            return CommonMethod.getReturnMessageOK("删除成功");
+        } catch (Exception e) {
+            log.error("删除提交记录失败", e);
+            return CommonMethod.getReturnMessageError("删除提交记录失败：" + e.getMessage());
         }
     }
 

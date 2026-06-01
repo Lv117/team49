@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.*;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
@@ -78,7 +80,7 @@ public class TeacherService {
     public DataResponse teacherDelete(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         if (personId == null || personId <= 0) {
-            return CommonMethod.getReturnMessageError("教师ID为空，不能删除！");
+            throw new BusinessException(ErrorCodes.TEACHER_NOT_FOUND, "教师ID为空，不能删除");
         }
         Optional<Teacher> op = teacherRepository.findById(personId);
         if (op.isPresent()) {
@@ -109,11 +111,11 @@ public class TeacherService {
         Integer personId = dataRequest.getInteger("personId");
         Map<String, Object> form = dataRequest.getMap("form");
         if (form == null) {
-            return CommonMethod.getReturnMessageError("教师信息为空，不能保存！");
+            throw new BusinessException(ErrorCodes.TEACHER_FORM_INVALID, "教师信息为空，不能保存");
         }
         String num = CommonMethod.getString(form, "num");
         if (num == null || num.trim().isEmpty()) {
-            return CommonMethod.getReturnMessageError("工号为空，不能保存！");
+            throw new BusinessException(ErrorCodes.TEACHER_NUM_REQUIRED, "工号为空，不能保存");
         }
         num = num.trim();
 
@@ -133,7 +135,7 @@ public class TeacherService {
             if (t == null) {
                 Optional<Teacher> existedTeacher = teacherRepository.findById(existedPerson.getPersonId());
                 if (existedTeacher.isPresent()) {
-                    return CommonMethod.getReturnMessageError("新工号已经存在，不能添加或修改！");
+                    throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "新工号已经存在，不能添加或修改");
                 }
                 if ("2".equals(existedPerson.getType())) {
                     // 历史半成功数据：person(type=2) 存在但 teacher/user 可能缺失，自动补齐
@@ -161,12 +163,12 @@ public class TeacherService {
                     t.setPersonId(personId);
                     teacherRepository.save(t);
                 } else {
-                    return CommonMethod.getReturnMessageError("新工号已经存在，不能添加或修改！");
+                    throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "新工号已经存在，不能添加或修改");
                 }
             } else {
                 String oldNum = t.getPerson() == null ? null : t.getPerson().getNum();
                 if (!num.equals(oldNum)) {
-                    return CommonMethod.getReturnMessageError("新工号已经存在，不能添加或修改！");
+                    throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "新工号已经存在，不能添加或修改");
                 }
             }
         }
@@ -199,7 +201,7 @@ public class TeacherService {
                     p = pOp.get();
                     t.setPerson(p);
                 } else {
-                    return CommonMethod.getReturnMessageError("教师对应人员信息不存在！");
+                    throw new BusinessException(ErrorCodes.TEACHER_NOT_FOUND, "教师对应人员信息不存在");
                 }
             }
         }

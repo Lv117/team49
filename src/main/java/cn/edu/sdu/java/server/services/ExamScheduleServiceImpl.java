@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.Course;
 import cn.edu.sdu.java.server.models.CourseSelection;
 import cn.edu.sdu.java.server.models.ExamSchedule;
@@ -52,7 +54,6 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
 
     @Override
     public List<OptionItem> getYearSemesterOptionList() {
-        // 这里可以从数据库中查询学年学期数据，这里为了演示返回一些示例数据
         List<OptionItem> yearSemesterList = new ArrayList<>();
         yearSemesterList.add(new OptionItem(1, "1", "2023-2024学年第一学期"));
         yearSemesterList.add(new OptionItem(2, "2", "2023-2024学年第二学期"));
@@ -194,14 +195,13 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
         String roleName = CommonMethod.getRoleName();
         String username = CommonMethod.getUsername();
         if ("ROLE_TEACHER".equals(roleName)) {
-            Optional<Teacher> tOp = teacherRepository.findByPersonNum(username);
-            if (tOp.isEmpty() || tOp.get().getPerson() == null) {
-                throw new RuntimeException("教师信息不存在，无法查看该考试学生");
-            }
-            String teacherName = tOp.get().getPerson().getName();
+            Teacher teacher = teacherRepository.findByPersonNum(username)
+                    .filter(t -> t.getPerson() != null)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.EXAM_TEACHER_NOT_FOUND, "教师信息不存在，无法查看该考试学生"));
+            String teacherName = teacher.getPerson().getName();
             String examTeacher = examSchedule.getTeacher();
             if (examTeacher == null || (!examTeacher.equals(teacherName) && !examTeacher.contains(teacherName))) {
-                throw new RuntimeException("无权查看非本人授课课程的学生成绩");
+                throw new BusinessException(ErrorCodes.EXAM_ACCESS_DENIED, "无权查看非本人授课课程的学生成绩");
             }
         }
 
@@ -274,7 +274,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
     public ExamSchedule saveExamSchedule(String originExamId, ExamSchedule examSchedule) {
         String newExamId = examSchedule.getExamId();
         if (newExamId == null || newExamId.isEmpty()) {
-            throw new RuntimeException("考试序号不能为空");
+            throw new BusinessException(ErrorCodes.EXAM_ID_REQUIRED, "考试序号不能为空");
         }
 
         if (originExamId != null && !originExamId.isEmpty()) {
@@ -282,7 +282,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
             if (originOp.isPresent()) {
                 if (!originExamId.equals(newExamId)) {
                     if (examScheduleRepository.existsById(newExamId)) {
-                        throw new RuntimeException("考试序号已存在，不能修改为重复序号");
+                        throw new BusinessException(ErrorCodes.EXAM_ID_DUPLICATE, "考试序号已存在，不能修改为重复序号");
                     }
                     ExamSchedule renamedExam = new ExamSchedule();
                     renamedExam.setExamId(newExamId);

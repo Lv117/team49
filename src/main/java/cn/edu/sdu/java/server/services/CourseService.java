@@ -68,9 +68,6 @@ public class CourseService {
         String teacherNumOrId = dataRequest.getString("teacherId");
         String classroom = dataRequest.getString("classroom");
         String schedule = dataRequest.getString("schedule");
-        
-        // 调试日志
-        System.out.println("[CourseSave Debug] courseId=" + courseId + ", num=" + num + ", teacherId=" + teacherNumOrId + ", classroom=" + classroom);
 
         Optional<Course> op;
         Course c = null;
@@ -89,31 +86,21 @@ public class CourseService {
 
         Teacher teacher = null;
         if (teacherNumOrId != null && !teacherNumOrId.isEmpty()) {
-            System.out.println("[CourseSave Debug] 尝试匹配教师: " + teacherNumOrId);
             Optional<Person> personOp = personRepository.findByNum(teacherNumOrId);
             if (personOp.isPresent()) {
                 Person p = personOp.get();
-                System.out.println("[CourseSave Debug] 找到 Person, ID=" + p.getPersonId());
                 Optional<Teacher> teacherOp = teacherRepository.findById(p.getPersonId());
                 if (teacherOp.isPresent()) {
                     teacher = teacherOp.get();
-                    System.out.println("[CourseSave Debug] 找到 Teacher!");
-                } else {
-                    System.out.println("[CourseSave Debug] 未找到对应 Teacher 记录 (该人员可能不是教师)");
                 }
             } else {
-                System.out.println("[CourseSave Debug] 未找到工号为 " + teacherNumOrId + " 的人员");
                 try {
                     Integer tid = Integer.parseInt(teacherNumOrId);
                     Optional<Teacher> teacherOp = teacherRepository.findById(tid);
                     if (teacherOp.isPresent()) {
                         teacher = teacherOp.get();
-                        System.out.println("[CourseSave Debug] 通过 ID 找到 Teacher!");
-                    } else {
-                        System.out.println("[CourseSave Debug] 通过 ID " + tid + " 也未找到 Teacher");
                     }
-                } catch (Exception e) {
-                    System.out.println("[CourseSave Debug] 解析 ID 失败");
+                } catch (Exception ignored) {
                 }
             }
         }
@@ -128,7 +115,6 @@ public class CourseService {
         c.setSchedule(schedule);
 
         courseRepository.save(c);
-        System.out.println("[CourseSave Debug] 保存成功, 最终 teacher=" + (teacher != null ? teacher.getPersonId() : "null") + ", classroom=" + classroom);
         return CommonMethod.getReturnMessageOK();
     }
     public DataResponse courseDelete(DataRequest dataRequest) {

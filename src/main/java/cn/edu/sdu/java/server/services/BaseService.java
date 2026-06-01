@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.*;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
@@ -158,13 +160,14 @@ public class BaseService {
             Integer personId = CommonMethod.getPersonId();
             if (personId == null)
                 return CommonMethod.getReturnData(dataList);
-            userTypeId = userRepository.findById(personId).get().getUserType().getId();
+            User currentUser = userRepository.findById(personId)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.ACCOUNT_NOT_FOUND, "当前账户不存在"));
+            if (currentUser.getUserType() == null || currentUser.getUserType().getId() == null) {
+                throw new BusinessException(ErrorCodes.MENU_USER_TYPE_MISSING, "当前账户未配置角色，无法加载菜单");
+            }
+            userTypeId = currentUser.getUserType().getId();
         }
-
-        // 添加调试日志
-        System.out.println("=== 查询菜单 === userTypeId: " + userTypeId);
         List<MenuInfo> mList = menuInfoRepository.findByUserTypeIds(userTypeId + "");
-        System.out.println("=== 查询结果 === 数量：" + (mList == null ? 0 : mList.size()));
 
         Map<String, Object> m;
         List<Map<String, Object>> sList;
@@ -185,8 +188,6 @@ public class BaseService {
             m.put("sList", sList);
             dataList.add(m);
         }
-
-        System.out.println("=== 返回数据 === 数量：" + dataList.size());
         return CommonMethod.getReturnData(dataList);
     }
 
@@ -309,14 +310,25 @@ public class BaseService {
     }
 
 
-    public DataResponse uploadPhoto(byte[] barr,String remoteFile) {
+    public DataResponse uploadPhoto(byte[] barr, String remoteFile) {
         try {
-            OutputStream os = new FileOutputStream(new File(attachFolder + remoteFile));
+            // 【关键修复】解码路径
+            if (remoteFile != null && remoteFile.contains("%")) {
+                remoteFile = java.net.URLDecoder.decode(remoteFile, "UTF-8");
+            }
+            
+            File targetFile = new File(attachFolder + remoteFile);
+            File parentDir = targetFile.getParentFile();
+            if (parentDir != null && !parentDir.exists()) {
+                parentDir.mkdirs();
+            }
+            OutputStream os = new FileOutputStream(targetFile);
             os.write(barr);
             os.close();
             return CommonMethod.getReturnMessageOK();
         } catch (Exception e) {
-            return CommonMethod.getReturnMessageError("上传错误");
+            log.error("文件上传失败: " + e.getMessage());
+            return CommonMethod.getReturnMessageError("上传错误: " + e.getMessage());
         }
     }
     public ResponseEntity<StreamingResponseBody> getBlobByteData(DataRequest dataRequest) {
@@ -362,16 +374,18 @@ public class BaseService {
     public DataResponse updatePassword(DataRequest dataRequest) {
         String oldPassword = dataRequest.getString("oldPassword");  //获取oldPassword
         String newPassword = dataRequest.getString("newPassword");  //获取newPassword
-        Optional<User> op = userRepository.findById(Objects.requireNonNull(CommonMethod.getPersonId()));
-        if (op.isEmpty())
-            return CommonMethod.getReturnMessageError("账户不存在！");  //通知前端操作正常
-        User u = op.get();
+        Integer currentPersonId = CommonMethod.getPersonId();
+        if (currentPersonId == null) {
+            throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+        }
+        User u = userRepository.findById(currentPersonId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.ACCOUNT_NOT_FOUND, "账户不存在"));
         if (!encoder.matches(oldPassword, u.getPassword())) {
-            return CommonMethod.getReturnMessageError("原始密码不正确！");
+            throw new BusinessException(ErrorCodes.PASSWORD_OLD_INVALID, "原始密码不正确");
         }
         u.setPassword(encoder.encode(newPassword));
         userRepository.save(u);
-        return CommonMethod.getReturnMessageOK();  //通知前端操作正常
+        return CommonMethod.getReturnMessageOK();
     }
 
 
@@ -425,22 +439,27 @@ public class BaseService {
         return CommonMethod.getReturnMessageError("下载错误！");
     }
 
-    public DataResponse uploadPhotoWeb(Map<String,Object> pars, MultipartFile file) {
+    public DataResponse uploadPhotoWeb(Map<String, Object> pars, MultipartFile file) {
         try {
             String remoteFile = CommonMethod.getString(pars, "remoteFile");
-            InputStream in = file.getInputStream();
-            int size = (int) file.getSize();
-            byte[] data = new byte[size];
-            int len =  in.read(data);
-            in.close();
-            OutputStream os = new FileOutputStream(new File(attachFolder + remoteFile));
-            os.write(data);
-            os.close();
+            // 【关键修复】前端传来的路径包含 URL 编码（如 %2F），必须还原为 /
+            if (remoteFile != null && remoteFile.contains("%")) {
+                remoteFile = java.net.URLDecoder.decode(remoteFile, "UTF-8");
+            }
+
+            File targetFile = new File(attachFolder + remoteFile);
+            // 确保父目录存在（解决少一层文件夹的问题）
+            if (targetFile.getParentFile() != null && !targetFile.getParentFile().exists()) {
+                targetFile.getParentFile().mkdirs();
+            }
+
+            // 使用 transferTo 自动保存，避免手动读写流
+            file.transferTo(targetFile);
             return CommonMethod.getReturnMessageOK();
         } catch (Exception e) {
-            log.error(e.getMessage());
+            log.error("文件上传失败: " + e.getMessage());
+            return CommonMethod.getReturnMessageError("上传错误: " + e.getMessage());
         }
-        return CommonMethod.getReturnMessageOK();
     }
     public DataResponse uploadPhotoBlobWeb(Map<String,Object> pars, MultipartFile file) {
         try {
@@ -455,6 +474,27 @@ public class BaseService {
             log.error(e.getMessage());
         }
         return CommonMethod.getReturnMessageOK();
+    }
+
+    /**
+     * 根据账号列表批量查询 (num → name) 映射
+     */
+    public DataResponse getPersonNamesByAccounts(DataRequest dataRequest) {
+        List<?> accounts = dataRequest.getList("accounts");
+        List<String> numList = new ArrayList<>();
+        for (Object acc : accounts) {
+            if (acc != null) {
+                numList.add(acc.toString());
+            }
+        }
+        Map<String, String> result = new HashMap<>();
+        if (!numList.isEmpty()) {
+            List<Person> persons = personRepository.findByNumIn(numList);
+            for (Person p : persons) {
+                result.put(p.getNum(), p.getName());
+            }
+        }
+        return CommonMethod.getReturnData(result);
     }
 
 }

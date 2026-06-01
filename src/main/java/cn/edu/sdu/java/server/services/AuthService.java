@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.*;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.request.LoginRequest;
@@ -68,14 +70,14 @@ public class AuthService {
             
             UserType userType = user.getUserType();
             if (userType == null || userType.getName() == null) {
-                return CommonMethod.getReturnMessageError("登录失败：用户角色信息缺失！");
+                throw new BusinessException(ErrorCodes.AUTH_ROLE_INVALID, "登录失败：用户角色信息缺失");
             }
             
             boolean isValidRole = Arrays.stream(EUserType.values())
                     .anyMatch(validRole -> validRole.name().equals(userType.getName()));
             
             if (!isValidRole) {
-                return CommonMethod.getReturnMessageError("登录失败：用户角色无效，不允许登录！");
+                throw new BusinessException(ErrorCodes.AUTH_ROLE_INVALID, "登录失败：用户角色无效，不允许登录");
             }
             
             // 切换账号和登录以认证成功为准，这里不再同步写 user 表，
@@ -100,11 +102,11 @@ public class AuthService {
         String validateCode = dataRequest.getString("validateCode");
         LoginControlUtil li =  LoginControlUtil.getInstance();
         if(validateCodeId == null || validateCode== null || validateCode.isEmpty()) {
-            return CommonMethod.getReturnMessageError("验证码为空！");
+            throw new BusinessException(ErrorCodes.AUTH_CAPTCHA_INVALID, "验证码为空");
         }
         String value = li.getValidateCode(validateCodeId);
         if(!validateCode.equals(value))
-            return CommonMethod.getReturnMessageError("验证码错位！");
+            throw new BusinessException(ErrorCodes.AUTH_CAPTCHA_INVALID, "验证码错误");
         return CommonMethod.getReturnMessageOK();
     }
     /*
@@ -120,7 +122,7 @@ public class AuthService {
         UserType ut = null;
         Optional<User> uOp = userRepository.findByUserName(username);
         if(uOp.isPresent()) {
-            return CommonMethod.getReturnMessageError("用户已经存在，不能注册！");
+            throw new BusinessException(ErrorCodes.REGISTER_USERNAME_CONFLICT, "用户已经存在，不能注册");
         }
         Person p = new Person();
         p.setNum(username);

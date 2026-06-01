@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.HonorActivityService;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/social-practice")
+@Tag(name = "Social Practice", description = "Social practice APIs")
 public class SocialPracticeController {
     private final HonorActivityService honorActivityService;
 
@@ -26,6 +29,7 @@ public class SocialPracticeController {
     /**
      * 获取社会实践列表
      */
+    @Operation(summary = "获取社会实践列表")
     @PostMapping("/getPracticeList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getPracticeList(@Valid @RequestBody DataRequest dataRequest) {
@@ -35,6 +39,7 @@ public class SocialPracticeController {
     /**
      * 分页获取社会实践数据
      */
+    @Operation(summary = "分页获取社会实践数据")
     @PostMapping("/getPracticePageData")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getPracticePageData(@Valid @RequestBody DataRequest dataRequest) {
@@ -44,6 +49,7 @@ public class SocialPracticeController {
     /**
      * 保存社会实践
      */
+    @Operation(summary = "保存社会实践")
     @PostMapping("/practiceSave")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse practiceSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -53,6 +59,7 @@ public class SocialPracticeController {
     /**
      * 删除社会实践
      */
+    @Operation(summary = "删除社会实践")
     @PostMapping("/practiceDelete")
     @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse practiceDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -62,6 +69,7 @@ public class SocialPracticeController {
     /**
      * 审批社会实践
      */
+    @Operation(summary = "审批社会实践")
     @PostMapping("/practiceApprove")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse practiceApprove(@Valid @RequestBody DataRequest dataRequest) {

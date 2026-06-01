@@ -35,4 +35,18 @@ public interface FeeRepository extends JpaRepository<Fee, Integer> {
      */
     @Query(value = "from Fee where student.personId = ?1 and day = ?2")
     Optional<Fee> findByStudentPersonIdAndDay(Integer personId, String day);
+    
+    /**
+     * 查询学生指定日期范围内的消费记录
+     */
+    @Query(value = "from Fee where student.personId = :personId and day >= :startDate and day <= :endDate order by day asc")
+    List<Fee> findByStudentAndDateRange(@Param("personId") Integer personId,
+                                        @Param("startDate") String startDate,
+                                        @Param("endDate") String endDate);
+    
+    /**
+     * 查询学生所有消费记录
+     */
+    @Query(value = "from Fee where student.personId = :personId order by day desc")
+    List<Fee> findByStudentId(@Param("personId") Integer personId);
 }

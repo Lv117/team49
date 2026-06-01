@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.payload.response.MyTreeNode;
@@ -25,6 +27,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/base")
 @Slf4j
+@Tag(name = "Base", description = "Base menu, dictionary, file and common APIs")
 public class BaseController {
     private final BaseService baseService;
     public BaseController(BaseService baseService) {
@@ -40,11 +43,13 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "获取菜单列表")
     @PostMapping("/getMenuList")
     public DataResponse getMenuList(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getMenuList(dataRequest);
     }
 
+    @Operation(summary = "Get database username")
     @PostMapping("/getDataBaseUserName")
     public DataResponse getDataBaseUserName(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getDataBaseUserName();
@@ -58,6 +63,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "获取所有角色信息的列表")
     @PostMapping("/getRoleOptionItemList")
     @PreAuthorize("hasRole('ADMIN')")
     public OptionItemList getRoleOptionItemList(@Valid @RequestBody DataRequest dataRequest) {
@@ -72,6 +78,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "获取某个用户类型 userTypeId 菜单树 信息")
     @PostMapping("/getMenuTreeNodeList")
     @PreAuthorize("hasRole('ADMIN')")
     public List<MyTreeNode> getMenuTreeNodeList(@Valid @RequestBody DataRequest dataRequest) {
@@ -87,6 +94,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "删除菜单")
     @PostMapping("/menuDelete")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse menuDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -102,6 +110,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "保存菜单信息")
     @PostMapping("/menuSave")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse menuSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -115,6 +124,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "获取某个数据字典树表信息")
     @PostMapping("/getDictionaryTreeNodeList")
     @PreAuthorize("hasRole('ADMIN')")
     public List<MyTreeNode> getDictionaryTreeNodeList(@Valid @RequestBody DataRequest dataRequest) {
@@ -128,6 +138,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "删除字典")
     @PostMapping("/dictionaryDelete")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse deleteDictionary(@Valid @RequestBody DataRequest dataRequest) {
@@ -142,6 +153,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "保存字典信息")
     @PostMapping("/dictionarySave")
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse dictionarySave(@Valid @RequestBody DataRequest dataRequest) {
@@ -156,6 +168,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "获取某种数据类型的数据字典列表")
     @PostMapping("/getDictionaryOptionItemList")
     public OptionItemList getDictionaryOptionItemList(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getDictionaryOptionItemList(dataRequest);
@@ -168,6 +181,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "获取服务器端的图片文件的数据")
     @PostMapping("/getFileByteData")
     public ResponseEntity<StreamingResponseBody> getFileByteData(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getFileByteData(dataRequest);
@@ -181,6 +195,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "上传文件服务")
     @PostMapping(path = "/uploadPhoto")
     public DataResponse uploadPhoto(@RequestBody byte[] barr,
                                     @RequestParam(name = "uploader") String uploader,
@@ -189,6 +204,7 @@ public class BaseController {
         return baseService.uploadPhoto(barr, remoteFile);
     }
 
+    @Operation(summary = "Get blob byte data")
     @PostMapping("/getBlobByteData")
     public ResponseEntity<StreamingResponseBody> getBlobByteData(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getBlobByteData(dataRequest);
@@ -202,6 +218,7 @@ public class BaseController {
      *
      *
      */
+    @Operation(summary = "上传文件服务")
     @PostMapping(path = "/uploadPhotoBlob")
     public DataResponse uploadPhotoBlob(@RequestBody byte[] barr,
                                     @RequestParam(name = "uploader") String uploader,
@@ -219,6 +236,7 @@ public class BaseController {
      */
     //  修改密码
     //Student页面的列表里点击删除按钮则可以删除已经存在的学生信息， 前端会将该记录的id 回传到后端，方法从参数获取id，查出相关记录，调用delete方法删除
+    @Operation(summary = "u pd at eP as sw or d")
     @PostMapping("/updatePassword")
     @PreAuthorize(" hasRole('ADMIN') or  hasRole('STUDENT') or  hasRole('TEACHER')")
     public DataResponse updatePassword(@Valid @RequestBody DataRequest dataRequest) {
@@ -233,6 +251,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "上传Html字符串流， 用于生成html字符流和PDF数据流的源HTML， 保存的内存MAP中")
     @PostMapping("/uploadHtmlString")
     @PreAuthorize(" hasRole('ADMIN') ")
     public DataResponse uploadHtmlString(@Valid @RequestBody DataRequest dataRequest) {
@@ -246,6 +265,7 @@ public class BaseController {
      *
      */
 
+    @Operation(summary = "获取Html页面数据，")
     @GetMapping("/getHtmlPage")
     public ResponseEntity<StreamingResponseBody> htmlGetBaseHtmlPage(HttpServletRequest request) {
        return baseService.htmlGetBaseHtmlPage(request);
@@ -254,19 +274,29 @@ public class BaseController {
 
 
     //  Web 请求
+    @Operation(summary = "Get photo image string")
     @PostMapping("/getPhotoImageStr")
     public DataResponse getPhotoImageStr(@Valid @RequestBody DataRequest dataRequest) {
         return baseService.getPhotoImageStr(dataRequest);
     }
 
+    @Operation(summary = "Upload photo from web")
     @PostMapping(value = "/uploadPhotoWeb", consumes = {"multipart/form-data"})
     @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN')")
     public DataResponse uploadPhotoWeb(@RequestParam Map<String,Object> pars, @RequestParam("file") MultipartFile file) {
         return baseService.uploadPhotoWeb(pars, file);
     }
+    @Operation(summary = "Upload photo blob from web")
     @PostMapping(value = "/uploadPhotoBlobWeb", consumes = {"multipart/form-data"})
     @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN')")
     public DataResponse uploadPhotoBlobWeb(@RequestParam Map<String,Object> pars, @RequestParam("file") MultipartFile file) {
         return baseService.uploadPhotoBlobWeb(pars, file);
+    }
+
+    @Operation(summary = "根据账号列表批量获取姓名映射 (num → name)")
+    @PostMapping("/getPersonNamesByAccounts")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT')")
+    public DataResponse getPersonNamesByAccounts(@Valid @RequestBody DataRequest dataRequest) {
+        return baseService.getPersonNamesByAccounts(dataRequest);
     }
 }

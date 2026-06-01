@@ -40,7 +40,7 @@ spring:
     enabled: false
 
 attach:
-  folder: /Java_project/
+  folder: uploads/
 
 logging:
   config: classpath:loggback.xml

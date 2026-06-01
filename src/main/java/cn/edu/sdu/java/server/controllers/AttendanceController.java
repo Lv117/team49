@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.AttendanceService;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/attendance")
+@Tag(name = "Attendance", description = "Attendance record and statistics APIs")
 public class AttendanceController {
     private final AttendanceService attendanceService;
 
@@ -23,6 +26,7 @@ public class AttendanceController {
     /**
      * 获取考勤列表
      */
+    @Operation(summary = "获取考勤列表")
     @PostMapping("/getAttendanceList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getAttendanceList(@Valid @RequestBody DataRequest dataRequest) {
@@ -32,6 +36,7 @@ public class AttendanceController {
     /**
      * 保存考勤记录
      */
+    @Operation(summary = "保存考勤记录")
     @PostMapping("/attendanceSave")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse attendanceSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -41,6 +46,7 @@ public class AttendanceController {
     /**
      * 批量保存考勤记录
      */
+    @Operation(summary = "批量保存考勤记录")
     @PostMapping("/attendanceBatchSave")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse attendanceBatchSave(@Valid @RequestBody DataRequest dataRequest) {
@@ -50,6 +56,7 @@ public class AttendanceController {
     /**
      * 删除考勤记录
      */
+    @Operation(summary = "删除考勤记录")
     @PostMapping("/attendanceDelete")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse attendanceDelete(@Valid @RequestBody DataRequest dataRequest) {
@@ -59,6 +66,7 @@ public class AttendanceController {
     /**
      * 获取考勤统计
      */
+    @Operation(summary = "获取考勤统计")
     @PostMapping("/getAttendanceStatistics")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getAttendanceStatistics(@Valid @RequestBody DataRequest dataRequest) {

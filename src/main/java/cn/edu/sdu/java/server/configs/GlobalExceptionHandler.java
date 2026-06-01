@@ -99,7 +99,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public DataResponse handleRuntimeException(RuntimeException e) {
         log.error("业务错误：{}", e.getMessage(), e);
-        return DataResponse.error("业务错误：" + e.getMessage(), ErrorCodes.SYSTEM_ERROR);
+        return DataResponse.error("系统处理失败，请稍后重试", ErrorCodes.SYSTEM_ERROR);
     }
 
     /**
@@ -109,6 +109,6 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public DataResponse handleException(Exception e) {
         log.error("系统异常：{}", e.getMessage(), e);
-        return DataResponse.error("系统错误：" + e.getMessage(), ErrorCodes.SYSTEM_ERROR);
+        return DataResponse.error("系统异常，请联系管理员或稍后重试", ErrorCodes.SYSTEM_ERROR);
     }
 }

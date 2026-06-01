@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.models.ExamSchedule;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
@@ -20,11 +22,13 @@ import java.util.Map;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/exam")
+@Tag(name = "Exam", description = "Exam schedule and exam student APIs")
 public class ExamController {
 
     @Autowired
     private ExamScheduleService examScheduleService;
 
+    @Operation(summary = "Get year semester option list")
     @PostMapping("/getYearSemesterOptionList")
     public OptionItemList getYearSemesterOptionList(@RequestBody DataRequest req) {
         try {
@@ -36,6 +40,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Get course option list")
     @PostMapping("/getCourseOptionList")
     public OptionItemList getCourseOptionList(@RequestBody DataRequest req) {
         try {
@@ -47,6 +52,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Get teacher option list")
     @PostMapping("/getTeacherOptionList")
     public OptionItemList getTeacherOptionList(@RequestBody DataRequest req) {
         try {
@@ -58,6 +64,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Get exam schedule list")
     @PostMapping("/getExamScheduleList")
     public DataResponse getExamScheduleList(@RequestBody DataRequest req) {
         try {
@@ -73,6 +80,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Save exam schedule")
     @PostMapping("/saveExamSchedule")
     public DataResponse saveExamSchedule(@RequestBody DataRequest req) {
         try {
@@ -108,6 +116,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "删除考试安排")
     @PostMapping("/deleteExamSchedule")
     public DataResponse deleteExamSchedule(@RequestBody DataRequest req) {
         try {
@@ -120,6 +129,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Get student exam schedule list")
     @PostMapping("/getStudentExamScheduleList")
     public DataResponse getStudentExamScheduleList(@RequestBody DataRequest req) {
         try {
@@ -134,6 +144,7 @@ public class ExamController {
         }
     }
 
+    @Operation(summary = "Get exam student list")
     @PostMapping("/getExamStudentList")
     public DataResponse getExamStudentList(@RequestBody DataRequest req) {
         try {

@@ -4,6 +4,7 @@ import cn.edu.sdu.java.server.models.Person;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 
 /*
@@ -13,6 +14,7 @@ import java.util.Optional;
  */
 public interface PersonRepository extends JpaRepository<Person, Integer> {
     Optional<Person> findByNum(String num);
+    List<Person> findByNumIn(List<String> nums);
     @Query("select p.photo from Person p where personId =?1")
     byte[] getPhotoByPersonId(Integer personId);
 }

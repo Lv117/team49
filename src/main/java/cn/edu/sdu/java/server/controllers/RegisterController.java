@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.RegisterService;
@@ -15,6 +17,7 @@ import java.util.Map;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Registration", description = "Username validation and registration APIs")
 public class RegisterController {
 
     private final RegisterService registerService;
@@ -30,6 +33,7 @@ public class RegisterController {
      * 返回格式：{"code":0,"msg":"success","data":Boolean}
      * data=true 可用，data=false 已存在
      */
+    @Operation(summary = "接口1：用户名重名校验")
     @PostMapping("/checkUsername")
     public DataResponse checkUsername(@RequestBody Map<String, Object> params) {
         DataRequest dataRequest = new DataRequest();
@@ -45,6 +49,7 @@ public class RegisterController {
      *   成功：{"code":0,"msg":"success","data":null}
      *   失败：{"code":1,"msg":"错误原因","data":null}
      */
+    @Operation(summary = "接口2：用户注册")
     @PostMapping("/register")
     public DataResponse register(@RequestBody Map<String, Object> params) {
         DataRequest dataRequest = new DataRequest();

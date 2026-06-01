@@ -35,7 +35,5 @@ public class StudentLeave {
     @Size(max=100)
     private String teacherComment;
     private Date teacherTime;
-    @Size(max=100)
-    private String adminComment;
-    private Date adminTime;
+    private Date returnTime;
 }

@@ -39,11 +39,11 @@ public class SecurityConfiguration {
                         authz -> {
                             try {
                                 authz
-                                        .requestMatchers("/api/test/**")
-                                        .permitAll()
                                         .requestMatchers("/api/auth/**")  // 允许登录接口
                                         .permitAll()
                                         .requestMatchers("/auth/**")  // 兼容旧版登录路径
+                                        .permitAll()
+                                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**")
                                         .permitAll()
                                         .requestMatchers("/public/**", "/index.html")  // 静态资源
                                         .permitAll()

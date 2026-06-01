@@ -43,4 +43,9 @@ public interface HomeworkSubmissionRepository extends JpaRepository<HomeworkSubm
      */
     @Query("SELECT hs FROM HomeworkSubmission hs WHERE hs.student.personId = ?1 ORDER BY hs.submitTime DESC")
     List<HomeworkSubmission> findByStudentPersonIdOrderBySubmitTimeDesc(Integer studentId);
+    
+    /**
+     * 根据作业 ID 删除所有提交记录
+     */
+    void deleteByHomeworkHomeworkId(Integer homeworkId);
 }

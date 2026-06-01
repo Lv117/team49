@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.Person;
 import cn.edu.sdu.java.server.repositorys.PersonRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,20 +40,13 @@ public class AvatarService {
      * @return 头像的相对路径(如 /avatars/xxx.jpg)
      */
     public String uploadAvatar(MultipartFile file) throws Exception {
-        // 1. 从SecurityContext获取当前用户ID
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) auth.getPrincipal();
-        Integer personId = userDetails.getId();
-
-        // 2. 验证文件
+        Integer personId = getCurrentPersonId();
         validateFile(file);
 
-        // 3. 生成唯一文件名
         String extension = getFileExtension(file.getOriginalFilename());
         String fileName = UUID.randomUUID().toString() + "." + extension;
         String relativePath = "avatars/" + fileName;
 
-        // 4. 确保目录存在并保存文件
         File directory = new File(attachFolder + "avatars");
         if (!directory.exists()) {
             directory.mkdirs();
@@ -59,9 +54,7 @@ public class AvatarService {
         Path path = Paths.get(attachFolder + relativePath);
         Files.write(path, file.getBytes());
 
-        // 5. 更新数据库(先删除旧头像)
-        Person person = personRepository.findById(personId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+        Person person = findPersonOrThrow(personId);
 
         if (person.getPhotoPath() != null) {
             try {
@@ -83,8 +76,7 @@ public class AvatarService {
      * @return 头像字节数组,如果不存在返回null
      */
     public byte[] getAvatar(Integer personId) throws Exception {
-        Person person = personRepository.findById(personId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+        Person person = findPersonOrThrow(personId);
 
         if (person.getPhotoPath() == null) {
             return null;
@@ -104,8 +96,7 @@ public class AvatarService {
      * @return Content-Type字符串
      */
     public String getAvatarContentType(Integer personId) throws Exception {
-        Person person = personRepository.findById(personId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+        Person person = findPersonOrThrow(personId);
 
         if (person.getPhotoPath() == null) {
             return "image/jpeg"; // 默认
@@ -125,8 +116,7 @@ public class AvatarService {
      * @param personId 人员ID
      */
     public void deleteAvatar(Integer personId) throws Exception {
-        Person person = personRepository.findById(personId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+        Person person = findPersonOrThrow(personId);
 
         if (person.getPhotoPath() != null) {
             try {
@@ -145,17 +135,30 @@ public class AvatarService {
      */
     private void validateFile(MultipartFile file) throws Exception {
         if (file.isEmpty()) {
-            throw new Exception("文件不能为空");
+            throw new BusinessException(ErrorCodes.AVATAR_FILE_INVALID, "文件不能为空");
         }
 
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new Exception("文件大小不能超过5MB");
+            throw new BusinessException(ErrorCodes.AVATAR_FILE_INVALID, "文件大小不能超过5MB");
         }
 
         String extension = getFileExtension(file.getOriginalFilename());
         if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
-            throw new Exception("文件格式不支持,仅支持jpg/png/gif");
+            throw new BusinessException(ErrorCodes.AVATAR_FILE_INVALID, "文件格式不支持，仅支持jpg/png/gif");
         }
+    }
+
+    private Integer getCurrentPersonId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof UserDetailsImpl userDetails)) {
+            throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+        }
+        return userDetails.getId();
+    }
+
+    private Person findPersonOrThrow(Integer personId) {
+        return personRepository.findById(personId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.AVATAR_USER_NOT_FOUND, "用户不存在"));
     }
 
     /**

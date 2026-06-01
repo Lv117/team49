@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.InnovationProject;
 import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
@@ -56,11 +58,10 @@ public class InnovationProjectService {
             projectList = innovationProjectRepository.findAll();
         }
         
-        // 过滤项目名称
         if (projectName != null && !projectName.isEmpty()) {
             final String searchName = projectName;
             projectList = projectList.stream()
-                    .filter(p -> p.getProjectName().contains(searchName))
+                    .filter(p -> containsKeyword(p.getProjectName(), searchName))
                     .toList();
         }
         if (teacherDataScopeService.isCurrentRoleTeacher()) {
@@ -121,11 +122,10 @@ public class InnovationProjectService {
                 dataTotal = (int) page.getTotalElements();
                 List<InnovationProject> list = page.getContent();
 
-                // 过滤
                 for (InnovationProject project : list) {
                     boolean match = true;
                     if (projectName != null && !projectName.isEmpty()) {
-                        if (!project.getProjectName().contains(projectName)) {
+                        if (!containsKeyword(project.getProjectName(), projectName)) {
                             match = false;
                         }
                     }
@@ -153,8 +153,10 @@ public class InnovationProjectService {
      * 保存创新实践项目
      */
     public DataResponse innovationProjectSave(DataRequest dataRequest) {
-        // 直接从 dataRequest.data 中获取参数
         Map<String, Object> form = dataRequest.getData();
+        if (form == null || form.isEmpty()) {
+            form = dataRequest.getMap("form");
+        }
         if (form == null) {
             form = new HashMap<>();
         }
@@ -165,17 +167,17 @@ public class InnovationProjectService {
         }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         String studentName = CommonMethod.getString(form, "studentName");
+        // 学生端提交时，后端必须覆盖前端传入的学生信息，避免越权替别人新增或修改项目。
         if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
             Integer currentStudentId = CommonMethod.getPersonId();
             if (currentStudentId == null) {
-                return CommonMethod.getReturnMessageError("未识别到当前学生身份，无法保存");
+                throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "未识别到当前学生身份，无法保存");
             }
-            Optional<Student> sop = studentRepository.findByPersonPersonId(currentStudentId);
-            if (sop.isEmpty() || sop.get().getPerson() == null) {
-                return CommonMethod.getReturnMessageError("当前学生信息不存在，无法保存");
-            }
+            Student student = studentRepository.findByPersonPersonId(currentStudentId)
+                    .filter(s -> s.getPerson() != null)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "当前学生信息不存在，无法保存"));
             studentId = currentStudentId;
-            studentName = sop.get().getPerson().getName();
+            studentName = student.getPerson().getName();
         }
         
         InnovationProject project = null;
@@ -246,43 +248,52 @@ public class InnovationProjectService {
         }
         String status = dataRequest.getString("status");
         String approvalOpinion = dataRequest.getString("approvalOpinion");
-        
-        if (projectId != null && projectId > 0) {
-            Optional<InnovationProject> op = innovationProjectRepository.findById(projectId);
-            if (op.isPresent()) {
-                InnovationProject project = op.get();
-                if (teacherDataScopeService.isCurrentRoleTeacher()
-                        && !teacherDataScopeService.canCurrentTeacherAccessStudent(project.getStudentId())) {
-                    return CommonMethod.getReturnMessageError("仅可审批本人授课学生提交的数据");
-                }
-                String currentStatus = project.getStatus();
-                
-                // 使用状态机工具类检查状态转换是否有效
-                if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
-                    return CommonMethod.getReturnMessageError(
-                        ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
-                }
-                
-                project.setStatus(status);
-                project.setApprovalOpinion(approvalOpinion);
-                project.setUpdateTime(LocalDateTime.now());
-                innovationProjectRepository.save(project);
-                // 保存审批记录
-                ApprovalRecord record = new ApprovalRecord();
-                record.setBusinessType("innovation");
-                record.setBusinessId(project.getId());
-                record.setFromStatus(currentStatus);
-                record.setToStatus(status);
-                record.setApprovalOpinion(approvalOpinion);
-                record.setOperatorId(CommonMethod.getPersonId());
-                record.setOperatorName(CommonMethod.getUsername());
-                record.setOperateTime(LocalDateTime.now());
-                approvalRecordRepository.save(record);
 
-            }
+        if (projectId == null || projectId <= 0) {
+            throw new BusinessException(ErrorCodes.INNOVATION_NOT_FOUND, "创新实践项目ID不能为空");
         }
-        
+        if (status == null || status.isBlank()) {
+            throw new BusinessException(ErrorCodes.INNOVATION_STATUS_INVALID, "目标状态不能为空");
+        }
+
+        InnovationProject project = innovationProjectRepository.findById(projectId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.INNOVATION_NOT_FOUND, "创新实践项目不存在"));
+
+        if (teacherDataScopeService.isCurrentRoleTeacher()
+                && !teacherDataScopeService.canCurrentTeacherAccessStudent(project.getStudentId())) {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
+        }
+
+        String currentStatus = project.getStatus();
+        // 创新实践审批与荣誉/活动审批共用同一状态机，避免跳过中间审批节点。
+        // 审批状态必须符合状态机定义，避免前端跳过教师/管理员审批步骤。
+        if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
+            throw new BusinessException(
+                    ErrorCodes.INNOVATION_STATUS_INVALID,
+                    ApprovalStateMachine.getTransitionErrorMessage(currentStatus, status));
+        }
+
+        project.setStatus(status);
+        project.setApprovalOpinion(approvalOpinion);
+        project.setUpdateTime(LocalDateTime.now());
+        innovationProjectRepository.save(project);
+
+        ApprovalRecord record = new ApprovalRecord();
+        record.setBusinessType("innovation");
+        record.setBusinessId(project.getId());
+        record.setFromStatus(currentStatus);
+        record.setToStatus(status);
+        record.setApprovalOpinion(approvalOpinion);
+        record.setOperatorId(CommonMethod.getPersonId());
+        record.setOperatorName(CommonMethod.getUsername());
+        record.setOperateTime(LocalDateTime.now());
+        approvalRecordRepository.save(record);
+
         return CommonMethod.getReturnMessageOK();
+    }
+
+    private boolean containsKeyword(String source, String keyword) {
+        return source != null && keyword != null && source.contains(keyword);
     }
 
     /**

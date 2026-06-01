@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.services;
 
+import cn.edu.sdu.java.server.exception.BusinessException;
+import cn.edu.sdu.java.server.exception.ErrorCodes;
 import cn.edu.sdu.java.server.models.Teacher;
 import cn.edu.sdu.java.server.repositorys.CourseSelectionRepository;
 import cn.edu.sdu.java.server.repositorys.ExamScheduleRepository;
@@ -65,5 +67,23 @@ public class TeacherDataScopeService {
             return false;
         }
         return getCurrentTeacherStudentIds().contains(studentId);
+    }
+
+    public Integer restrictStudentIdForTeacher(Integer studentId) {
+        if (studentId == null || !isCurrentRoleTeacher()) {
+            return studentId;
+        }
+        assertCurrentTeacherAccessStudent(studentId);
+        return studentId;
+    }
+
+    public void assertCurrentTeacherAccessStudent(Integer studentId) {
+        assertCurrentTeacherAccessStudent(studentId, "仅可查看或操作本人授课学生的数据");
+    }
+
+    public void assertCurrentTeacherAccessStudent(Integer studentId, String message) {
+        if (isCurrentRoleTeacher() && !canCurrentTeacherAccessStudent(studentId)) {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, message);
+        }
     }
 }

@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.controllers;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.services.AvatarService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/avatar")
 @RequiredArgsConstructor
+@Tag(name = "Avatar", description = "Avatar upload, download and delete APIs")
 public class AvatarController {
 
     private final AvatarService avatarService;
@@ -33,6 +36,7 @@ public class AvatarController {
      * @param file 上传的图片文件
      * @return 包含头像URL的响应
      */
+    @Operation(summary = "上传头像")
     @PostMapping("/upload")
     @PreAuthorize("hasRole('STUDENT') or hasRole('TEACHER') or hasRole('ADMIN')")
     public ResponseEntity<DataResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
@@ -55,6 +59,7 @@ public class AvatarController {
      * @param personId 人员ID
      * @return 图片二进制流或404
      */
+    @Operation(summary = "获取头像")
     @GetMapping("/{personId}")
     public ResponseEntity<?> getAvatar(@PathVariable Integer personId) {
         try {
@@ -80,6 +85,7 @@ public class AvatarController {
      * @param request 包含personId的请求体
      * @return 操作结果
      */
+    @Operation(summary = "删除头像")
     @DeleteMapping
     @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN')")
     public ResponseEntity<DataResponse> deleteAvatar(@RequestBody Map<String, Integer> request) {
