@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.HashSet;
 
 @Service
 public class StudentStatisticsService {
@@ -25,27 +27,132 @@ public class StudentStatisticsService {
     private final ScoreRepository scoreRepository;
     private final StudentLeaveRepository studentLeaveRepository;
     private final StudentStatisticsRepository studentStatisticsRepository;
-    public StudentStatisticsService(StudentRepository studentRepository, ScoreRepository scoreRepository, StudentLeaveRepository studentLeaveRepository, StudentStatisticsRepository studentStatisticsRepository) {
+    private final TeacherDataScopeService teacherDataScopeService;
+    private final ScoreCalculationService scoreCalculationService;
+    
+    public StudentStatisticsService(StudentRepository studentRepository, 
+                                   ScoreRepository scoreRepository, 
+                                   StudentLeaveRepository studentLeaveRepository, 
+                                   StudentStatisticsRepository studentStatisticsRepository,
+                                   TeacherDataScopeService teacherDataScopeService,
+                                   ScoreCalculationService scoreCalculationService) {
         this.studentRepository = studentRepository;
         this.scoreRepository = scoreRepository;
         this.studentLeaveRepository = studentLeaveRepository;
         this.studentStatisticsRepository = studentStatisticsRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
+        this.scoreCalculationService = scoreCalculationService;
     }
     public DataResponse getStudentStatisticsList(DataRequest dataRequest) {
-        List<Map<String, Object>> dataList = new ArrayList<>();
         List<StudentStatistics> sList = studentStatisticsRepository.findAll();
+        
+        // 教师权限：只显示其作为指导老师负责的学生的数据
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedStudentIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            sList = sList.stream()
+                .filter(ss -> ss.getStudent() != null && allowedStudentIds.contains(ss.getStudent().getPersonId()))
+                .collect(java.util.stream.Collectors.toList());
+        }
+        
+        // 从绩分计算面板获取排名数据（包含正确的权重配置计算的totalScore和排名）
+        DataResponse rankingResponse = scoreCalculationService.getScoreRanking();
+        Map<Integer, Map<String, Object>> rankingMap = new HashMap<>();
+        if (rankingResponse != null && rankingResponse.getCode() == 0 && rankingResponse.getData() instanceof List) {
+            List<Map<String, Object>> rankingList = (List<Map<String, Object>>) rankingResponse.getData();
+            for (Map<String, Object> ranking : rankingList) {
+                Object studentIdObj = ranking.get("studentId");
+                if (studentIdObj instanceof Number) {
+                    rankingMap.put(((Number) studentIdObj).intValue(), ranking);
+                }
+            }
+        }
+        
+        // 实时查询请假次数（不依赖数据库缓存）
+        List<Integer> personIdList = new ArrayList<>();
+        for (StudentStatistics ss : sList) {
+            personIdList.add(ss.getStudent().getPersonId());
+        }
+        Map<Integer, Integer> leaveCountMap = new HashMap<>();
+        if (!personIdList.isEmpty()) {
+            List<?> leaveList = studentLeaveRepository.getStudentStatisticsList(personIdList);
+            if (leaveList != null && !leaveList.isEmpty()) {
+                for (Object item : leaveList) {
+                    Object[] as = (Object[]) item;
+                    Integer personId = (Integer) as[0];
+                    Long count = (Long) as[1];
+                    leaveCountMap.put(personId, count.intValue());
+                }
+            }
+        }
+        
+        // 构建数据列表
+        List<Map<String, Object>> dataList = new ArrayList<>();
         for (StudentStatistics ss : sList) {
             Map<String, Object> m = new HashMap<>();
             Person p = ss.getStudent().getPerson();
             m.put("studentNum", p.getNum());
             m.put("studentName", p.getName());
             m.put("courseCount", ss.getCourseCount()+"");
-            m.put("avgScore", ss.getAvgScore());
-            m.put("gpa", ss.getGpa());
-            m.put("no", ss.getNo()+"");
-            m.put("leaveCount", ss.getLeaveCount()+"");
+            
+            // 从绩分计算面板的排名数据中获取综合绩分、成绩和排名
+            Map<String, Object> ranking = rankingMap.get(ss.getStudent().getPersonId());
+            Integer rank = null;
+            if (ranking != null) {
+                // 综合绩分：保留两位小数
+                Object totalScoreObj = ranking.get("totalScore");
+                double totalScore = totalScoreObj instanceof Number ? ((Number) totalScoreObj).doubleValue() : 0.0;
+                m.put("totalScore", String.format("%.2f", totalScore));
+                
+                // 成绩：从categoryScores中获取"成绩"维度得分，保留两位小数
+                Object categoryScoresObj = ranking.get("categoryScores");
+                double avgScore = ss.getAvgScore(); // 默认值
+                if (categoryScoresObj instanceof Map) {
+                    Map<?, ?> categoryScores = (Map<?, ?>) categoryScoresObj;
+                    Object scoreObj = categoryScores.get("成绩");
+                    if (scoreObj instanceof Number) {
+                        avgScore = ((Number) scoreObj).doubleValue();
+                    }
+                }
+                m.put("avgScore", String.format("%.2f", avgScore));
+                
+                // 排名：从绩分计算面板获取（基于综合绩分排序）
+                Object rankObj = ranking.get("rank");
+                if (rankObj instanceof Number) {
+                    rank = ((Number) rankObj).intValue();
+                    m.put("no", rankObj.toString());
+                } else {
+                    m.put("no", "");
+                }
+            } else {
+                // 如果排名数据中没有，使用旧数据作为兜底
+                double totalScore = ss.getGpa() != null ? ss.getGpa() : 0.0;
+                m.put("totalScore", String.format("%.2f", totalScore));
+                double avgScore = ss.getAvgScore() != null ? ss.getAvgScore() : 0.0;
+                m.put("avgScore", String.format("%.2f", avgScore));
+                m.put("no", ss.getNo() != null ? ss.getNo().toString() : "");
+                rank = ss.getNo();
+            }
+            
+            // 请假次数：使用实时查询的数据
+            Integer leaveCount = leaveCountMap.get(ss.getStudent().getPersonId());
+            m.put("leaveCount", leaveCount != null ? leaveCount.toString() : "0");
+            
+            // 保存排名用于后续排序
+            m.put("_rank", rank != null ? rank : 999999);
+            
             dataList.add(m);
         }
+        
+        // 按排名排序（排名小的在前）
+        dataList.sort((a, b) -> {
+            Integer rankA = (Integer) a.get("_rank");
+            Integer rankB = (Integer) b.get("_rank");
+            return Integer.compare(rankA, rankB);
+        });
+        
+        // 移除临时排序字段
+        dataList.forEach(m -> m.remove("_rank"));
+        
         return CommonMethod.getReturnData(dataList);
     };
     public DataResponse doStudentStatistics(DataRequest dataRequest) {

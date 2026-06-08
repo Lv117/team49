@@ -16,6 +16,6 @@ public interface StudentLeaveRepository extends JpaRepository<StudentLeave,Integ
     @Query(value = "SELECT sl FROM StudentLeave sl WHERE (?1 <0 or sl.state = ?1) and (?2='' or sl.student.person.num like %?2% or sl.student.person.name like %?2%) and (?3='' or sl.student.person.num = ?3) and (?4='' or sl.teacher.person.num =?4) and (?5 is null or sl.teacher.personId = ?5)")
     List<StudentLeave> getStudentLeaveList(Integer state, String search, String studentNum, String teacherNum, Integer teacherId);
 
-    @Query(value="select s.student.personId, count(s.studentLeaveId) from StudentLeave s where s.student.personId in ?1 group by s.student.personId" )
+    @Query(value="select s.student.personId, count(s.studentLeaveId) from StudentLeave s where s.student.personId in ?1 and s.state in (1, 3) group by s.student.personId" )
     List<?> getStudentStatisticsList(List<Integer> personId);
 }

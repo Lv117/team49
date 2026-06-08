@@ -56,15 +56,15 @@ public class ScoreCalculationService {
     
     /**
      * 计算单个学生的综合绩分（4维加权计算）
-     * 成绩40%+考勤20%+创新20%+荣誉20%
+     * 成绩85%+实践5%+创新5%+荣誉5%
      */
     public Map<String, Object> calculateStudentScore(Integer studentId, Map<String, Double> weights) {
         if (weights == null || weights.isEmpty()) {
             Map<String, Double> defaultWeights = new LinkedHashMap<>();
-            defaultWeights.put("成绩", 0.8);
+            defaultWeights.put("成绩", 0.85);
             defaultWeights.put("实践", 0.05);
             defaultWeights.put("创新", 0.05);
-            defaultWeights.put("荣誉", 0.1);
+            defaultWeights.put("荣誉", 0.05);
             weights = defaultWeights;
         }
 
@@ -272,14 +272,14 @@ public class ScoreCalculationService {
      */
     public DataResponse getDefaultWeights() {
         Map<String, Double> weights = new LinkedHashMap<>();
-        weights.put("成绩", 0.8);
+        weights.put("成绩", 0.85);
         weights.put("实践", 0.05);
         weights.put("创新", 0.05);
-        weights.put("荣誉", 0.1);
+        weights.put("荣誉", 0.05);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("weights", weights);
-        result.put("description", "默认权重配置：成绩80%，实践5%，创新5%，荣誉10%");
+        result.put("description", "默认权重配置：成绩85%，实践5%，创新5%，荣誉5%");
         
         return CommonMethod.getReturnData(result);
     }
