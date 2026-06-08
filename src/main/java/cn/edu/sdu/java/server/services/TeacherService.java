@@ -12,6 +12,8 @@ import cn.edu.sdu.java.server.repositorys.UserTypeRepository;
 import cn.edu.sdu.java.server.util.ComDataUtil;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import cn.edu.sdu.java.server.util.DateTimeTool;
+import jakarta.persistence.EntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +27,15 @@ public class TeacherService {
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final PasswordEncoder encoder;
+    private final EntityManager entityManager;
 
-    public TeacherService(PersonRepository personRepository, TeacherRepository teacherRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder) {
+    public TeacherService(PersonRepository personRepository, TeacherRepository teacherRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, EntityManager entityManager) {
         this.personRepository = personRepository;
         this.teacherRepository = teacherRepository;
         this.userRepository = userRepository;
         this.userTypeRepository = userTypeRepository;
         this.encoder = encoder;
+        this.entityManager = entityManager;
     }
 
     public Map<String, Object> getMapFromTeacher(Teacher t) {
@@ -77,6 +81,25 @@ public class TeacherService {
         return CommonMethod.getReturnData(getTeacherMapList(numName));
     }
 
+    /**
+     * 验证邮箱格式是否合法
+     * @param email 邮箱地址
+     * @return 如果邮箱为空或格式正确返回 null，否则返回错误信息
+     */
+    private String validateEmail(String email) {
+        if (email == null || email.isEmpty()) {
+            return null; // 邮箱为空不验证
+        }
+        // 邮箱格式正则：本地部分@域名部分
+        // 本地部分：允许字母、数字、下划线、点、横线
+        // 域名部分：允许字母、数字、横线，必须包含点，顶级域名至少2个字符
+        String emailRegex = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$";
+        if (!email.matches(emailRegex)) {
+            return "邮箱格式不正确，请输入有效的邮箱地址（如：example@domain.com）";
+        }
+        return null;
+    }
+
     public DataResponse teacherDelete(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         if (personId == null || personId <= 0) {
@@ -106,8 +129,29 @@ public class TeacherService {
         return CommonMethod.getReturnData(getMapFromTeacher(t));
     }
 
+    /**
+     * 包装并重新抛出教师保存异常，将底层异常转换为业务异常
+     */
+    private void rethrowTeacherSaveException(Exception e) {
+        if (e instanceof DataIntegrityViolationException) {
+            throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "工号已存在或数据冲突，请检查输入信息");
+        }
+        throw new BusinessException(ErrorCodes.SYSTEM_ERROR, "教师信息保存失败，请稍后重试");
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public DataResponse teacherEditSave(DataRequest dataRequest) {
+        try {
+            return doTeacherEditSave(dataRequest);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            rethrowTeacherSaveException(e);
+            return null; // 不会执行到这里
+        }
+    }
+
+    private DataResponse doTeacherEditSave(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         Map<String, Object> form = dataRequest.getMap("form");
         if (form == null) {
@@ -118,6 +162,15 @@ public class TeacherService {
             throw new BusinessException(ErrorCodes.TEACHER_NUM_REQUIRED, "工号为空，不能保存");
         }
         num = num.trim();
+
+        // 验证邮箱格式
+        String email = CommonMethod.getString(form, "email");
+        if (email != null && !email.trim().isEmpty()) {
+            String emailError = validateEmail(email.trim());
+            if (emailError != null) {
+                throw new BusinessException(ErrorCodes.TEACHER_EMAIL_INVALID, emailError);
+            }
+        }
 
         Teacher t = null;
         Person p = null;
@@ -133,8 +186,8 @@ public class TeacherService {
         if (nOp.isPresent()) {
             Person existedPerson = nOp.get();
             if (t == null) {
-                Optional<Teacher> existedTeacher = teacherRepository.findById(existedPerson.getPersonId());
-                if (existedTeacher.isPresent()) {
+                Optional<Teacher> existedTeacherOp = teacherRepository.findById(existedPerson.getPersonId());
+                if (existedTeacherOp.isPresent()) {
                     throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "新工号已经存在，不能添加或修改");
                 }
                 if ("2".equals(existedPerson.getType())) {
@@ -143,6 +196,9 @@ public class TeacherService {
                     personId = p.getPersonId();
                     Optional<User> existedUser = userRepository.findByPersonPersonId(personId);
                     UserType teacherType = userTypeRepository.findByName(EUserType.ROLE_TEACHER.name());
+                    if (teacherType == null) {
+                        throw new BusinessException(ErrorCodes.SYSTEM_ERROR, "教师用户类型未配置，请联系管理员");
+                    }
                     if (existedUser.isPresent()) {
                         u = existedUser.get();
                         u.setUserName(num);
@@ -159,9 +215,16 @@ public class TeacherService {
                         u.setLoginCount(0);
                         userRepository.save(u);
                     }
-                    t = new Teacher();
-                    t.setPersonId(personId);
-                    teacherRepository.save(t);
+                    // 使用已存在的teacher对象（如果存在）或创建新的
+                    if (existedTeacherOp.isPresent()) {
+                        t = existedTeacherOp.get();
+                    } else {
+                        t = new Teacher();
+                        t.setPersonId(personId);
+                        t.setPerson(p);
+                        // 使用 persist 而非 save，避免因 personId 已设置导致 Hibernate 误判为 detached 而调用 merge
+                        entityManager.persist(t);
+                    }
                 } else {
                     throw new BusinessException(ErrorCodes.TEACHER_NUM_CONFLICT, "新工号已经存在，不能添加或修改");
                 }
@@ -184,15 +247,27 @@ public class TeacherService {
             u.setPersonId(personId);
             u.setUserName(num);
             u.setPassword(encoder.encode("123456"));
-            u.setUserType(userTypeRepository.findByName(EUserType.ROLE_TEACHER.name()));
+            UserType teacherType = userTypeRepository.findByName(EUserType.ROLE_TEACHER.name());
+            if (teacherType == null) {
+                throw new BusinessException(ErrorCodes.SYSTEM_ERROR, "教师用户类型未配置，请联系管理员");
+            }
+            u.setUserType(teacherType);
             u.setCreateTime(DateTimeTool.parseDateTime(new Date()));
             u.setCreatorId(CommonMethod.getPersonId());
             u.setLoginCount(0);
             userRepository.save(u);
 
-            t = new Teacher();
-            t.setPersonId(personId);
-            teacherRepository.save(t);
+            // 检查是否已存在相同personId的Teacher记录（处理数据不一致情况）
+            Optional<Teacher> existingTeacher = teacherRepository.findById(personId);
+            if (existingTeacher.isPresent()) {
+                t = existingTeacher.get();
+            } else {
+                t = new Teacher();
+                t.setPersonId(personId);
+                t.setPerson(p);
+                // 使用 persist 而非 save，避免因 personId 已设置导致 Hibernate 误判为 detached 而调用 merge
+                entityManager.persist(t);
+            }
         } else {
             p = t.getPerson();
             if (p == null && personId != null) {
@@ -206,6 +281,9 @@ public class TeacherService {
             }
         }
 
+        if (p == null) {
+            throw new BusinessException(ErrorCodes.TEACHER_NOT_FOUND, "教师人员信息不存在");
+        }
         personId = p.getPersonId();
         if (!num.equals(p.getNum())) {
             Optional<User> uOp = userRepository.findByPersonPersonId(personId);

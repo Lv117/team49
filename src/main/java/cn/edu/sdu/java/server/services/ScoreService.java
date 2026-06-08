@@ -60,16 +60,50 @@ public class ScoreService {
         return new OptionItemList(0, itemList);
     }
 
-    public OptionItemList getCourseItemOptionList(DataRequest dataRequest) {
-        List<Course> sList = courseRepository.findAll();  //数据库查询操作
-        List<OptionItem> itemList = new ArrayList<>();
-        for (Course c : sList) {
-            itemList.add(new OptionItem(c.getCourseId(),c.getCourseId()+"", c.getNum()+"-"+c.getName()));
-        }
-        return new OptionItemList(0, itemList);
-    }
+     public OptionItemList getCourseItemOptionList(DataRequest dataRequest) {
+         List<Course> sList = courseRepository.findAll();
+         List<OptionItem> itemList = new ArrayList<>();
+         Set<Integer> teacherCourseIds = teacherDataScopeService.getCurrentTeacherCourseIds();
+         boolean isTeacher = teacherDataScopeService.isCurrentRoleTeacher();
+         
+         for (Course c : sList) {
+             // 教师只能看到自己授课的课程
+             if (isTeacher && !teacherCourseIds.contains(c.getCourseId())) {
+                 continue;
+             }
+             itemList.add(new OptionItem(c.getCourseId(),c.getCourseId()+"", c.getNum()+"-"+c.getName()));
+         }
+         return new OptionItemList(0, itemList);
+     }
 
-    public DataResponse getScoreList(DataRequest dataRequest) {
+     /**
+      * 获取教师授课课程列表（用于左侧课程列表展示）
+      * 管理员返回所有课程，教师只返回自己授课的课程
+      */
+     public DataResponse getTeacherCourseList(DataRequest dataRequest) {
+         List<Course> allCourses = courseRepository.findAll();
+         List<Map<String, Object>> courseList = new ArrayList<>();
+         Set<Integer> teacherCourseIds = teacherDataScopeService.getCurrentTeacherCourseIds();
+         boolean isTeacher = teacherDataScopeService.isCurrentRoleTeacher();
+         
+         for (Course c : allCourses) {
+             // 教师只能看到自己授课的课程
+             if (isTeacher && !teacherCourseIds.contains(c.getCourseId())) {
+                 continue;
+             }
+             
+             Map<String, Object> courseMap = new HashMap<>();
+             courseMap.put("courseId", c.getCourseId());
+             courseMap.put("courseNum", c.getNum());
+             courseMap.put("courseName", c.getName());
+             courseMap.put("credit", c.getCredit());
+             courseList.add(courseMap);
+         }
+         
+         return CommonMethod.getReturnData(courseList);
+     }
+
+     public DataResponse getScoreList(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
         personId = resolveStudentIdForQuery(personId, "教师仅可查看本人授课学生的成绩");
         if(personId == null)
@@ -77,7 +111,13 @@ public class ScoreService {
         Integer courseId = dataRequest.getInteger("courseId");
         if(courseId == null)
             courseId = 0;
-        List<Score> sList = scoreRepository.findByStudentCourse(personId, courseId);  //数据库查询操作
+        
+        // 验证课程权限
+        if (courseId > 0 && teacherDataScopeService.isCurrentRoleTeacher()) {
+            teacherDataScopeService.assertCurrentTeacherAccessCourse(courseId, "教师仅可查看本人授课课程的成绩");
+        }
+        
+        List<Score> sList = scoreRepository.findByStudentCourse(personId, courseId);
         sList = filterScoresForTeacher(sList);
         List<Map<String,Object>> dataList = new ArrayList<>();
         Map<String,Object> m;
@@ -102,17 +142,28 @@ public class ScoreService {
         Integer courseId = dataRequest.getInteger("courseId");
         String rawMark = dataRequest.getString("mark");
         Integer scoreId = dataRequest.getInteger("scoreId");
+        
+        System.out.println("[SCORE SAVE DEBUG] 收到保存请求 - scoreId: " + scoreId + ", personId: " + personId + ", courseId: " + courseId + ", mark: " + rawMark);
+        
         Score s = null;
         if (scoreId != null) {
             s = requireScore(scoreId);
+            System.out.println("[SCORE SAVE DEBUG] 找到已存在的成绩记录 - scoreId: " + s.getScoreId() + ", 数据库中的personId: " + getStudentId(s) + ", 数据库中的courseId: " + getCourseId(s) + ", 原成绩: " + s.getMark());
         }
         if (s != null) {
             assertStudentAccessible(getStudentId(s), "教师仅可维护本人授课学生的成绩");
+            assertCourseAccessible(s.getCourse().getCourseId(), "教师仅可维护本人授课课程的成绩");
             personId = getStudentId(s);
             courseId = s.getCourse() == null ? courseId : s.getCourse().getCourseId();
         } else {
             personId = resolveRequiredStudentId(personId, ErrorCodes.SCORE_STUDENT_REQUIRED, "添加失败，学生不能为空", "教师仅可维护本人授课学生的成绩");
         }
+        
+        // 验证课程权限
+        if (courseId != null && courseId > 0) {
+            assertCourseAccessible(courseId, "教师仅可维护本人授课课程的成绩");
+        }
+        
         BigDecimal originalMark = s == null ? null : s.getMark();
         BigDecimal mark = ScoreMarkValidator.parseOrNull(rawMark);
         if (mark == null) {
@@ -144,6 +195,7 @@ public class ScoreService {
         }
         s.setMark(mark);
         scoreRepository.save(s);
+        System.out.println("[SCORE SAVE DEBUG] 保存成功 - scoreId: " + s.getScoreId() + ", 新成绩: " + s.getMark());
         return CommonMethod.getReturnMessageOK();
     }
     public DataResponse scoreDelete(DataRequest dataRequest) {
@@ -153,6 +205,7 @@ public class ScoreService {
         }
         Score s = requireScore(scoreId);
         assertStudentAccessible(getStudentId(s), "教师仅可删除本人授课学生的成绩");
+        assertCourseAccessible(s.getCourse().getCourseId(), "教师仅可删除本人授课课程的成绩");
         scoreRepository.delete(s);
         return CommonMethod.getReturnMessageOK();
     }
@@ -184,6 +237,13 @@ public class ScoreService {
         teacherDataScopeService.assertCurrentTeacherAccessStudent(studentId, teacherMessage);
     }
 
+    private void assertCourseAccessible(Integer courseId, String message) {
+        if (courseId == null || courseId <= 0) {
+            return;
+        }
+        teacherDataScopeService.assertCurrentTeacherAccessCourse(courseId, message);
+    }
+
     private Integer getCurrentStudentIdOrNull() {
         if (!"ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
             return null;
@@ -211,9 +271,28 @@ public class ScoreService {
             return scoreList;
         }
         Set<Integer> studentIds = getTeacherStudentIds();
-        return scoreList.stream()
-                .filter(score -> studentIds.contains(getStudentId(score)))
+        Set<Integer> courseIds = teacherDataScopeService.getCurrentTeacherCourseIds();
+        System.out.println("[SCORE DEBUG] filterScoresForTeacher - 教师授课学生IDs: " + studentIds);
+        System.out.println("[SCORE DEBUG] filterScoresForTeacher - 教师授课课程IDs: " + courseIds);
+        System.out.println("[SCORE DEBUG] filterScoresForTeacher - 过滤前成绩数量: " + scoreList.size());
+        List<Score> filtered = scoreList.stream()
+                .filter(score -> {
+                    boolean studentOk = studentIds.contains(getStudentId(score));
+                    boolean courseOk = courseIds.contains(getCourseId(score));
+                    if (!studentOk || !courseOk) {
+                        System.out.println("[SCORE DEBUG] 过滤掉成绩 - scoreId: " + score.getScoreId() + 
+                            ", studentId: " + getStudentId(score) + " (允许: " + studentOk + ")" +
+                            ", courseId: " + getCourseId(score) + " (允许: " + courseOk + ")");
+                    }
+                    return studentOk && courseOk;
+                })
                 .toList();
+        System.out.println("[SCORE DEBUG] filterScoresForTeacher - 过滤后成绩数量: " + filtered.size());
+        return filtered;
+    }
+
+    private Integer getCourseId(Score score) {
+        return score == null || score.getCourse() == null ? null : score.getCourse().getCourseId();
     }
 
     private Score requireScore(Integer scoreId) {

@@ -162,6 +162,9 @@ public class ConsumptionService {
     public DataResponse consumptionDelete(DataRequest dataRequest) {
         Integer feeId = dataRequest.getInteger("feeId");
         if (feeId == null || feeId <= 0) {
+            feeId = dataRequest.getInteger("consumptionId");
+        }
+        if (feeId == null || feeId <= 0) {
             throw new BusinessException(ErrorCodes.CONSUMPTION_ID_REQUIRED, "消费记录ID不能为空");
         }
         Fee fee = feeRepository.findById(feeId)
@@ -176,7 +179,22 @@ public class ConsumptionService {
      */
     public DataResponse getMonthlyConsumptionStats(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
-        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可查看本人授课学生的月度消费统计");
+        Integer studentIdParam = dataRequest.getInteger("studentId");
+        if (personId == null || personId <= 0) {
+            personId = studentIdParam;
+        }
+
+        // 权限处理：学生必须绑定自己，管理员/教师可不传personId查全部
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || currentPersonId <= 0) {
+                throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+            }
+            personId = currentPersonId;
+        } else if (personId != null && personId > 0) {
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(personId, "教师仅可查看本人授课学生的月度消费统计");
+        }
+        // 管理员/教师 personId 为 null 时表示查询全量
         String yearMonth = dataRequest.getString("yearMonth");
         
         if (yearMonth == null || yearMonth.isEmpty()) {
@@ -192,10 +210,26 @@ public class ConsumptionService {
         Map<String, Double> stats = new LinkedHashMap<>();
         String[] types = {"dining", "study", "transport", "life", "entertainment"};
         String[] typeNames = {"餐饮消费", "学习用品", "交通费", "生活用品", "娱乐消费"};
-        
+
+        List<Fee> feeList;
+        if (personId != null && personId > 0) {
+            feeList = feeRepository.findByStudentAndDateRange(personId, startDate, endDate);
+        } else {
+            feeList = feeRepository.findAll();
+            feeList = filterFeesForTeacher(feeList);
+            // 内存中按日期过滤
+            feeList = feeList.stream()
+                    .filter(f -> f.getDay() != null && f.getDay().compareTo(startDate) >= 0 && f.getDay().compareTo(endDate) <= 0)
+                    .toList();
+        }
+
         for (int i = 0; i < types.length; i++) {
-            List<Fee> feeList = feeRepository.findByStudentAndTypeAndDateRange(personId, types[i], startDate, endDate);
-            double total = feeList.stream().mapToDouble(Fee::getMoney).sum();
+            final int index = i;
+            String type = types[index];
+            double total = feeList.stream()
+                    .filter(f -> type.equals(f.getConsumptionType()))
+                    .mapToDouble(f -> f.getMoney() != null ? f.getMoney() : 0)
+                    .sum();
             stats.put(typeNames[i], total);
         }
         
@@ -221,7 +255,120 @@ public class ConsumptionService {
         
         return CommonMethod.getReturnData(result);
     }
-    
+
+    /**
+     * 获取月度消费趋势(近12个月每月总消费)
+     * 支持 year/month 参数：
+     * - 不传 year：默认返回近12个月的月度趋势
+     * - 传 year 不传 month：返回该年所有月份的月度趋势
+     * - 传 year + month：返回该年该月的每日趋势
+     */
+    public DataResponse getMonthlyConsumptionTrend(DataRequest dataRequest) {
+        Integer personId = dataRequest.getInteger("personId");
+        Integer studentId = dataRequest.getInteger("studentId");
+        if (personId == null || personId <= 0) {
+            personId = studentId;
+        }
+
+        Integer year = dataRequest.getInteger("year");
+        Integer month = dataRequest.getInteger("month");
+
+        String startDateStr, endDateStr;
+        boolean dailyMode = false;
+
+        LocalDate now = LocalDate.now();
+        if (year != null && year > 0) {
+            if (month != null && month > 0) {
+                // 指定年月：返回该月每日趋势
+                dailyMode = true;
+                startDateStr = String.format("%04d-%02d-01", year, month);
+                int lastDay = java.time.YearMonth.of(year, month).lengthOfMonth();
+                endDateStr = String.format("%04d-%02d-%02d", year, month, lastDay);
+            } else {
+                // 仅指定年：返回该年12个月的月度趋势
+                startDateStr = String.format("%04d-01-01", year);
+                endDateStr = String.format("%04d-12-31", year);
+            }
+        } else {
+            // 默认：近12个月
+            LocalDate start = now.minusMonths(11).withDayOfMonth(1);
+            startDateStr = start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            endDateStr = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        }
+
+        // 查询数据
+        List<Fee> feeList;
+        if (personId != null && personId > 0) {
+            feeList = feeRepository.findByStudentAndDateRange(personId, startDateStr, endDateStr);
+        } else {
+            // 管理员/教师查全量：先按起始日期过滤，再在内存中按结束日期过滤
+            feeList = feeRepository.findAllFromStartDate(startDateStr);
+            feeList = filterFeesForTeacher(feeList);
+            final String finalEnd = endDateStr;
+            feeList = feeList.stream()
+                    .filter(f -> f.getDay() != null && f.getDay().compareTo(finalEnd) <= 0)
+                    .toList();
+        }
+
+        List<Map<String, Object>> trendList = new ArrayList<>();
+
+        if (dailyMode) {
+            // 按日聚合
+            Map<String, Double> dailyMap = new LinkedHashMap<>();
+            int daysInMonth = java.time.YearMonth.of(year, month).lengthOfMonth();
+            for (int d = 1; d <= daysInMonth; d++) {
+                String dayKey = String.format("%04d-%02d-%02d", year, month, d);
+                dailyMap.put(dayKey, 0.0);
+            }
+            for (Fee fee : feeList) {
+                String day = fee.getDay();
+                if (day != null && dailyMap.containsKey(day)) {
+                    dailyMap.put(day, dailyMap.get(day) + (fee.getMoney() != null ? fee.getMoney() : 0));
+                }
+            }
+            for (Map.Entry<String, Double> entry : dailyMap.entrySet()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("month", entry.getKey()); // yyyy-MM-dd 格式，前端解析
+                item.put("amount", Math.round(entry.getValue() * 100.0) / 100.0);
+                trendList.add(item);
+            }
+        } else {
+            // 按月聚合
+            Map<String, Double> monthlyMap = new LinkedHashMap<>();
+            if (year != null && year > 0) {
+                // 初始化该年12个月
+                for (int m = 1; m <= 12; m++) {
+                    String monthKey = String.format("%04d-%02d", year, m);
+                    monthlyMap.put(monthKey, 0.0);
+                }
+            } else {
+                // 初始化近12个月
+                for (int i = 0; i < 12; i++) {
+                    LocalDate monthDate = now.minusMonths(11 - i).withDayOfMonth(1);
+                    String monthKey = monthDate.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+                    monthlyMap.put(monthKey, 0.0);
+                }
+            }
+            for (Fee fee : feeList) {
+                String day = fee.getDay();
+                if (day != null && day.length() >= 7) {
+                    String monthKey = day.substring(0, 7); // "yyyy-MM"
+                    if (monthlyMap.containsKey(monthKey)) {
+                        monthlyMap.put(monthKey, monthlyMap.get(monthKey) + (fee.getMoney() != null ? fee.getMoney() : 0));
+                    }
+                }
+            }
+            for (Map.Entry<String, Double> entry : monthlyMap.entrySet()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("month", entry.getKey());
+                item.put("amount", Math.round(entry.getValue() * 100.0) / 100.0);
+                trendList.add(item);
+            }
+        }
+
+        return CommonMethod.getReturnData(trendList);
+    }
+
     /**
      * Excel批量导入消费数据
      */
@@ -257,6 +404,7 @@ public class ConsumptionService {
             
             int successCount = 0;
             int failCount = 0;
+            List<String> failReasons = new ArrayList<>();
             
             // 从第二行开始读取(第一行是标题)
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
@@ -298,8 +446,10 @@ public class ConsumptionService {
                     feeRepository.save(fee);
                     successCount++;
                 } catch (Exception e) {
-                    log.warn("导入第{}行数据失败: {}", i + 1, e.getMessage());
+                    String reason = "第" + (i + 1) + "行导入失败: " + e.getMessage();
+                    log.warn(reason);
                     failCount++;
+                    failReasons.add(reason);
                 }
             }
             
@@ -308,6 +458,7 @@ public class ConsumptionService {
             Map<String, Object> result = new HashMap<>();
             result.put("successCount", successCount);
             result.put("failCount", failCount);
+            result.put("failReasons", failReasons);
             
             return CommonMethod.getReturnData(result);
         } catch (IOException e) {
@@ -436,30 +587,54 @@ public class ConsumptionService {
     }
     
     /**
-     * 检查异常消费（预警）
+     * 检查异常消费（预警）- 支持全量扫描
+     * 预警类型：单笔超额、单日超额、频率异常、月度消费过低、月度消费过高
+     * personId 可选：管理员/教师不传则扫描所有学生
      */
     public DataResponse checkAbnormalConsumption(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
-        personId = resolveRequiredStudentId(personId, "学生ID不能为空", "教师仅可查看本人授课学生的消费预警");
-        Double singleThreshold = dataRequest.getDouble("singleThreshold"); // 单笔超过阈值
-        Double dailyThreshold = dataRequest.getDouble("dailyThreshold");   // 单日消费过高
-        Double frequencyThreshold = dataRequest.getDouble("frequencyThreshold"); // 消费频率异常
-        
+        Integer studentIdParam = dataRequest.getInteger("studentId");
+        if (personId == null || personId <= 0) {
+            personId = studentIdParam;
+        }
+
+        // 权限处理：学生只能查自己，管理员/教师可不传personId查全部
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            Integer currentPersonId = CommonMethod.getPersonId();
+            if (currentPersonId == null || currentPersonId <= 0) {
+                throw new BusinessException(ErrorCodes.AUTH_FAILED, "当前登录状态无效，请重新登录");
+            }
+            personId = currentPersonId;
+        } else if (personId != null && personId > 0) {
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(personId, "教师仅可查看本人授课学生的消费预警");
+        }
+        // 管理员/教师 personId 为 null 时表示扫描全部
+
+        Double singleThreshold = dataRequest.getDouble("singleThreshold");
+        Double dailyHighThreshold = dataRequest.getDouble("dailyHighThreshold");
+        Double frequencyThreshold = dataRequest.getDouble("frequencyThreshold");
+        Double monthlyLowThreshold = dataRequest.getDouble("monthlyLowThreshold");
+        Double monthlyHighThreshold = dataRequest.getDouble("monthlyHighThreshold");
+
         // 默认阈值
-        if (singleThreshold == null || singleThreshold <= 0) {
-            singleThreshold = 500.0; // 单笔超过500元
+        if (singleThreshold == null || singleThreshold <= 0) singleThreshold = 500.0;
+        if (dailyHighThreshold == null || dailyHighThreshold <= 0) dailyHighThreshold = 1000.0;
+        if (frequencyThreshold == null || frequencyThreshold <= 0) frequencyThreshold = 10.0;
+        if (monthlyLowThreshold == null || monthlyLowThreshold <= 0) monthlyLowThreshold = 200.0;
+        if (monthlyHighThreshold == null || monthlyHighThreshold <= 0) monthlyHighThreshold = 5000.0;
+
+        // 获取消费数据
+        List<Fee> allFees;
+        if (personId != null && personId > 0) {
+            allFees = feeRepository.findByStudentId(personId);
+        } else {
+            allFees = feeRepository.findAll();
+            allFees = filterFeesForTeacher(allFees);
         }
-        if (dailyThreshold == null || dailyThreshold <= 0) {
-            dailyThreshold = 1000.0; // 单日超过1000元
-        }
-        if (frequencyThreshold == null || frequencyThreshold <= 0) {
-            frequencyThreshold = 10.0; // 单日消费次数超过10次
-        }
-        
-        List<Fee> allFees = feeRepository.findByStudentId(personId);
+
         List<Map<String, Object>> abnormalList = new ArrayList<>();
-        
-        // 检查单笔超过阈值
+
+        // ========== 1. 单笔超额 ==========
         for (Fee fee : allFees) {
             if (fee.getMoney() > singleThreshold) {
                 Map<String, Object> abnormal = new HashMap<>();
@@ -468,65 +643,132 @@ public class ConsumptionService {
                 abnormal.put("threshold", singleThreshold);
                 abnormal.put("amount", fee.getMoney());
                 abnormal.put("excess", fee.getMoney() - singleThreshold);
+                abnormal.put("studentName", getStudentNameFromFee(fee));
+                abnormal.put("studentNum", getStudentNumFromFee(fee));
                 abnormalList.add(abnormal);
             }
         }
-        
-        // 检查单日消费过高
+
+        // ========== 2. 单日消费过高 ==========
+        // 按 personId+day 分组
         Map<String, Double> dailyStats = new HashMap<>();
         Map<String, List<Fee>> dailyFees = new HashMap<>();
-        
         for (Fee fee : allFees) {
-            String day = fee.getDay();
-            dailyStats.put(day, dailyStats.getOrDefault(day, 0.0) + fee.getMoney());
-            dailyFees.computeIfAbsent(day, k -> new ArrayList<>()).add(fee);
+            String key = (fee.getStudent() != null ? fee.getStudent().getPersonId() : 0) + "_" + fee.getDay();
+            dailyStats.put(key, dailyStats.getOrDefault(key, 0.0) + fee.getMoney());
+            dailyFees.computeIfAbsent(key, k -> new ArrayList<>()).add(fee);
         }
-        
+
         for (Map.Entry<String, Double> entry : dailyStats.entrySet()) {
-            if (entry.getValue() > dailyThreshold) {
+            if (entry.getValue() > dailyHighThreshold) {
+                List<Fee> dayFees = dailyFees.get(entry.getKey());
+                Fee firstFee = dayFees.get(0);
+                String[] parts = entry.getKey().split("_", 2);
+                String day = parts.length > 1 ? parts[1] : "";
+
                 Map<String, Object> abnormal = new HashMap<>();
                 abnormal.put("type", "单日超额");
-                abnormal.put("day", entry.getKey());
-                abnormal.put("threshold", dailyThreshold);
+                abnormal.put("day", day);
+                abnormal.put("threshold", dailyHighThreshold);
                 abnormal.put("totalAmount", entry.getValue());
-                abnormal.put("excess", entry.getValue() - dailyThreshold);
-                abnormal.put("count", dailyFees.get(entry.getKey()).size());
-                abnormal.put("details", dailyFees.get(entry.getKey()).stream()
-                        .map(this::getMapFromFee).toList());
+                abnormal.put("excess", entry.getValue() - dailyHighThreshold);
+                abnormal.put("count", dayFees.size());
+                abnormal.put("details", dayFees.stream().map(this::getMapFromFee).toList());
+                abnormal.put("studentName", getStudentNameFromFee(firstFee));
+                abnormal.put("studentNum", getStudentNumFromFee(firstFee));
                 abnormalList.add(abnormal);
             }
         }
-        
-        // 检查消费频率异常
+
+        // ========== 3. 频率异常 ==========
         Map<String, Integer> frequencyStats = new HashMap<>();
         for (Fee fee : allFees) {
-            String day = fee.getDay();
-            frequencyStats.put(day, frequencyStats.getOrDefault(day, 0) + 1);
+            String key = (fee.getStudent() != null ? fee.getStudent().getPersonId() : 0) + "_" + fee.getDay();
+            frequencyStats.put(key, frequencyStats.getOrDefault(key, 0) + 1);
         }
-        
+
         for (Map.Entry<String, Integer> entry : frequencyStats.entrySet()) {
             if (entry.getValue() > frequencyThreshold) {
+                List<Fee> dayFees = dailyFees.get(entry.getKey());
+                Fee firstFee = dayFees.get(0);
+                String[] parts = entry.getKey().split("_", 2);
+                String day = parts.length > 1 ? parts[1] : "";
+
                 Map<String, Object> abnormal = new HashMap<>();
                 abnormal.put("type", "频率异常");
-                abnormal.put("day", entry.getKey());
+                abnormal.put("day", day);
                 abnormal.put("threshold", frequencyThreshold);
                 abnormal.put("frequency", entry.getValue());
-                abnormal.put("details", dailyFees.get(entry.getKey()).stream()
-                        .map(this::getMapFromFee).toList());
+                abnormal.put("details", dayFees.stream().map(this::getMapFromFee).toList());
+                abnormal.put("studentName", getStudentNameFromFee(firstFee));
+                abnormal.put("studentNum", getStudentNumFromFee(firstFee));
                 abnormalList.add(abnormal);
             }
         }
-        
+
+        // ========== 4. 月度消费过低/过高 ==========
+        // 按 personId+month 分组
+        Map<String, Double> monthlyStats = new HashMap<>();
+        Map<String, Fee> monthlyFirstFee = new HashMap<>();
+        for (Fee fee : allFees) {
+            String day = fee.getDay();
+            if (day == null || day.length() < 7) continue;
+            String month = day.substring(0, 7); // "yyyy-MM"
+            String key = (fee.getStudent() != null ? fee.getStudent().getPersonId() : 0) + "_" + month;
+            monthlyStats.put(key, monthlyStats.getOrDefault(key, 0.0) + fee.getMoney());
+            monthlyFirstFee.putIfAbsent(key, fee);
+        }
+
+        for (Map.Entry<String, Double> entry : monthlyStats.entrySet()) {
+            String[] parts = entry.getKey().split("_", 2);
+            String month = parts.length > 1 ? parts[1] : "";
+            Fee firstFee = monthlyFirstFee.get(entry.getKey());
+
+            if (entry.getValue() < monthlyLowThreshold) {
+                Map<String, Object> abnormal = new HashMap<>();
+                abnormal.put("type", "月度消费过低");
+                abnormal.put("day", month);
+                abnormal.put("threshold", monthlyLowThreshold);
+                abnormal.put("totalAmount", entry.getValue());
+                abnormal.put("excess", monthlyLowThreshold - entry.getValue());
+                abnormal.put("studentName", getStudentNameFromFee(firstFee));
+                abnormal.put("studentNum", getStudentNumFromFee(firstFee));
+                abnormalList.add(abnormal);
+            } else if (entry.getValue() > monthlyHighThreshold) {
+                Map<String, Object> abnormal = new HashMap<>();
+                abnormal.put("type", "月度消费过高");
+                abnormal.put("day", month);
+                abnormal.put("threshold", monthlyHighThreshold);
+                abnormal.put("totalAmount", entry.getValue());
+                abnormal.put("excess", entry.getValue() - monthlyHighThreshold);
+                abnormal.put("studentName", getStudentNameFromFee(firstFee));
+                abnormal.put("studentNum", getStudentNumFromFee(firstFee));
+                abnormalList.add(abnormal);
+            }
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("abnormalCount", abnormalList.size());
         result.put("abnormalList", abnormalList);
         result.put("thresholds", Map.of(
                 "singleThreshold", singleThreshold,
-                "dailyThreshold", dailyThreshold,
-                "frequencyThreshold", frequencyThreshold
+                "dailyHighThreshold", dailyHighThreshold,
+                "frequencyThreshold", frequencyThreshold,
+                "monthlyLowThreshold", monthlyLowThreshold,
+                "monthlyHighThreshold", monthlyHighThreshold
         ));
-        
+
         return CommonMethod.getReturnData(result);
+    }
+
+    private String getStudentNameFromFee(Fee fee) {
+        return fee != null && fee.getStudent() != null && fee.getStudent().getPerson() != null
+                ? fee.getStudent().getPerson().getName() : "";
+    }
+
+    private String getStudentNumFromFee(Fee fee) {
+        return fee != null && fee.getStudent() != null && fee.getStudent().getPerson() != null
+                ? (fee.getStudent().getPerson().getNum() != null ? fee.getStudent().getPerson().getNum() : "") : "";
     }
     
     /**

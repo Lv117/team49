@@ -30,6 +30,7 @@ public class CourseController {
     public DataResponse courseSave(@Valid @RequestBody DataRequest dataRequest) {
         return courseService.courseSave(dataRequest);
     }
+
     @Operation(summary = "Delete c ou rs e")
     @PostMapping("/courseDelete")
     public DataResponse courseDelete(@Valid @RequestBody DataRequest dataRequest) {

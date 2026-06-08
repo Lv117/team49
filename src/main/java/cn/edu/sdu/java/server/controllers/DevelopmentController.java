@@ -65,7 +65,7 @@ public class DevelopmentController {
      */
     @Operation(summary = "审批发展记录")
     @PostMapping("/developmentApprove")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse developmentApprove(@Valid @RequestBody DataRequest dataRequest) {
         return developmentService.developmentApprove(dataRequest);
     }

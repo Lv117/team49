@@ -16,6 +16,7 @@ public final class ErrorCodes {
     public static final String STUDENT_SAVE_TIMEOUT = "STUDENT_SAVE_TIMEOUT";
     public static final String STUDENT_SAVE_DB_ERROR = "STUDENT_SAVE_DB_ERROR";
     public static final String STUDENT_USER_TYPE_MISSING = "STUDENT_USER_TYPE_MISSING";
+    public static final String STUDENT_EMAIL_INVALID = "STUDENT_EMAIL_INVALID";
 
     public static final String HONOR_NOT_FOUND = "HONOR_NOT_FOUND";
     public static final String HONOR_STATUS_INVALID = "HONOR_STATUS_INVALID";
@@ -48,6 +49,7 @@ public final class ErrorCodes {
     public static final String TEACHER_FORM_INVALID = "TEACHER_FORM_INVALID";
     public static final String TEACHER_NUM_REQUIRED = "TEACHER_NUM_REQUIRED";
     public static final String TEACHER_NUM_CONFLICT = "TEACHER_NUM_CONFLICT";
+    public static final String TEACHER_EMAIL_INVALID = "TEACHER_EMAIL_INVALID";
     public static final String COURSE_MATERIAL_FILE_INVALID = "COURSE_MATERIAL_FILE_INVALID";
     public static final String COURSE_MATERIAL_NOT_FOUND = "COURSE_MATERIAL_NOT_FOUND";
     public static final String COURSE_MATERIAL_SAVE_FAILED = "COURSE_MATERIAL_SAVE_FAILED";

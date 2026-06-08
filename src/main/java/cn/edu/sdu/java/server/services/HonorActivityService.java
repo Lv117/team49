@@ -97,6 +97,10 @@ public class HonorActivityService {
     public DataResponse getHonorPageData(DataRequest dataRequest) {
         String honorName = dataRequest.getString("honorName");
         String status = dataRequest.getString("status");
+        Integer studentId = dataRequest.getInteger("studentId");
+        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
+            studentId = CommonMethod.getPersonId();
+        }
         Integer cPage = dataRequest.getCurrentPage();
         int pageIndex = cPage != null ? cPage : 0;
         int size = 20;
@@ -141,6 +145,9 @@ public class HonorActivityService {
                             match = false;
                         }
                     }
+                    if (studentId != null && !Objects.equals(studentId, honor.getStudentId())) {
+                        match = false;
+                    }
 
                     if (match) {
                         dataList.add(getMapFromHonor(honor));
@@ -164,31 +171,43 @@ public class HonorActivityService {
         if (form == null || form.isEmpty()) {
             form = dataRequest.getData() != null ? dataRequest.getData() : new HashMap<>();
         }
+        String roleName = CommonMethod.getRoleName();
+        if (!"ROLE_STUDENT".equals(roleName) && !"ROLE_ADMIN".equals(roleName)) {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "当前角色无权新增或编辑荣誉记录");
+        }
         Integer honorId = CommonMethod.getInteger(form, "honorId");
         if (honorId == null) {
             honorId = CommonMethod.getInteger(form, "id");
         }
         Integer studentId = CommonMethod.getInteger(form, "studentId");
         String studentName = CommonMethod.getString(form, "studentName");
-        // 学生端只能维护自己的荣誉数据，后端统一以当前登录人身份为准。
-        if ("ROLE_STUDENT".equals(CommonMethod.getRoleName())) {
-            Integer currentStudentId = CommonMethod.getPersonId();
-            if (currentStudentId == null) {
+        Integer currentPersonId = CommonMethod.getPersonId();
+        if ("ROLE_STUDENT".equals(roleName)) {
+            if (currentPersonId == null) {
                 throw new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "未识别到当前学生身份，无法保存");
             }
-            Student student = studentRepository.findByPersonPersonId(currentStudentId)
+            Student student = studentRepository.findByPersonPersonId(currentPersonId)
                     .filter(s -> s.getPerson() != null)
                     .orElseThrow(() -> new BusinessException(ErrorCodes.STUDENT_NOT_FOUND, "当前学生信息不存在，无法保存"));
-            studentId = currentStudentId;
+            studentId = currentPersonId;
             studentName = student.getPerson().getName();
         }
         
         Honor honor = null;
+        String currentStatus = "draft";
         
         if (honorId != null && honorId > 0) {
             Optional<Honor> op = honorRepository.findById(honorId);
             if (op.isPresent()) {
                 honor = op.get();
+                if ("ROLE_STUDENT".equals(roleName)) {
+                    validateStudentHonorOwnership(honor, currentPersonId);
+                }
+                currentStatus = honor.getStatus() != null ? honor.getStatus() : "draft";
+                if ("ROLE_STUDENT".equals(roleName)
+                        && ("submitted".equals(currentStatus) || "approved".equals(currentStatus))) {
+                    throw new BusinessException(ErrorCodes.ACCESS_DENIED, "已提交或已审批的荣誉记录不允许再次编辑");
+                }
                 honor.setUpdateTime(LocalDateTime.now());
             }
         }
@@ -196,6 +215,31 @@ public class HonorActivityService {
         if (honor == null) {
             honor = new Honor();
             honor.setCreateTime(LocalDateTime.now());
+        }
+
+        String targetStatus = CommonMethod.getString(form, "status");
+        if (targetStatus == null || targetStatus.isEmpty()) {
+            targetStatus = "draft";
+        }
+        if ("ROLE_STUDENT".equals(roleName)) {
+            if (!"draft".equals(targetStatus) && !"submitted".equals(targetStatus)) {
+                throw new BusinessException(ErrorCodes.HONOR_STATUS_INVALID, "学生仅可保存草稿或提交待审批");
+            }
+            if (honorId != null && honorId > 0
+                    && !currentStatus.equals(targetStatus)
+                    && !ApprovalStateMachine.isValidTransition(currentStatus, targetStatus)) {
+                throw new BusinessException(
+                        ErrorCodes.HONOR_STATUS_INVALID,
+                        ApprovalStateMachine.getTransitionErrorMessage(currentStatus, targetStatus));
+            }
+        } else {
+            if (honorId == null || honorId <= 0) {
+                if (!"draft".equals(targetStatus)) {
+                    throw new BusinessException(ErrorCodes.ACCESS_DENIED, "管理员新增荣誉记录时不能直接提交");
+                }
+            } else if (!Objects.equals(currentStatus, targetStatus)) {
+                throw new BusinessException(ErrorCodes.ACCESS_DENIED, "管理员编辑荣誉记录时不能变更提交状态");
+            }
         }
         
         honor.setStudentId(studentId);
@@ -210,10 +254,7 @@ public class HonorActivityService {
         
         honor.setDescription(CommonMethod.getString(form, "description"));
         honor.setCertificateUrl(CommonMethod.getString(form, "certificateUrl"));
-        honor.setApprovalOpinion(CommonMethod.getString(form, "approvalOpinion"));
-        
-        String statusStr = CommonMethod.getString(form, "status");
-        honor.setStatus(statusStr != null && !statusStr.isEmpty() ? statusStr : "draft");
+        honor.setStatus(targetStatus);
         
         honorRepository.save(honor);
         
@@ -224,14 +265,26 @@ public class HonorActivityService {
      * 删除荣誉奖励
      */
     public DataResponse honorDelete(DataRequest dataRequest) {
+        String roleName = CommonMethod.getRoleName();
+        if (!"ROLE_STUDENT".equals(roleName) && !"ROLE_ADMIN".equals(roleName)) {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "当前角色无权删除荣誉记录");
+        }
         Integer honorId = dataRequest.getInteger("honorId");
         if (honorId == null) {
             honorId = dataRequest.getInteger("id");
         }
         
         if (honorId != null && honorId > 0) {
-            Optional<Honor> op = honorRepository.findById(honorId);
-            op.ifPresent(honorRepository::delete);
+            Honor honor = honorRepository.findById(honorId)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.HONOR_NOT_FOUND, "荣誉记录不存在"));
+            if ("ROLE_STUDENT".equals(roleName)) {
+                validateStudentHonorOwnership(honor, CommonMethod.getPersonId());
+                String currentStatus = honor.getStatus();
+                if (!"draft".equals(currentStatus) && !"rejected".equals(currentStatus)) {
+                    throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅草稿或已驳回的荣誉记录允许删除");
+                }
+            }
+            honorRepository.delete(honor);
         }
         
         return CommonMethod.getReturnMessageOK();
@@ -257,12 +310,22 @@ public class HonorActivityService {
 
         Honor honor = honorRepository.findById(honorId)
                 .orElseThrow(() -> new BusinessException(ErrorCodes.HONOR_NOT_FOUND, "荣誉记录不存在"));
-        if (teacherDataScopeService.isCurrentRoleTeacher()
-                && !teacherDataScopeService.canCurrentTeacherAccessStudent(honor.getStudentId())) {
-            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
-        }
+        String roleName = CommonMethod.getRoleName();
         String currentStatus = honor.getStatus();
-        // 审批必须按状态机流转，避免出现“草稿直接终审通过”这类越级状态。
+
+        if ("ROLE_STUDENT".equals(roleName)) {
+            validateStudentHonorOwnership(honor, CommonMethod.getPersonId());
+            if (!"submitted".equals(status)) {
+                throw new BusinessException(ErrorCodes.ACCESS_DENIED, "学生仅可提交荣誉记录，不能执行审批");
+            }
+        } else if ("ROLE_ADMIN".equals(roleName)) {
+            if (!"approved".equals(status) && !"rejected".equals(status)) {
+                throw new BusinessException(ErrorCodes.ACCESS_DENIED, "管理员仅可审批通过或驳回荣誉记录");
+            }
+        } else {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "当前角色无权操作荣誉审批流程");
+        }
+
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
             throw new BusinessException(
                     ErrorCodes.HONOR_STATUS_INVALID,
@@ -270,7 +333,9 @@ public class HonorActivityService {
         }
 
         honor.setStatus(status);
-        honor.setApprovalOpinion(approvalOpinion);
+        if ("ROLE_ADMIN".equals(roleName)) {
+            honor.setApprovalOpinion(approvalOpinion);
+        }
         honor.setUpdateTime(LocalDateTime.now());
         honorRepository.save(honor);
 
@@ -279,7 +344,7 @@ public class HonorActivityService {
         record.setBusinessId(honor.getId());
         record.setFromStatus(currentStatus);
         record.setToStatus(status);
-        record.setApprovalOpinion(approvalOpinion);
+        record.setApprovalOpinion("ROLE_ADMIN".equals(roleName) ? approvalOpinion : null);
         record.setOperatorId(CommonMethod.getPersonId());
         record.setOperatorName(CommonMethod.getUsername());
         record.setOperateTime(LocalDateTime.now());
@@ -539,6 +604,12 @@ public class HonorActivityService {
 
     private boolean containsKeyword(String source, String keyword) {
         return source != null && keyword != null && source.contains(keyword);
+    }
+
+    private void validateStudentHonorOwnership(Honor honor, Integer currentStudentId) {
+        if (currentStudentId == null || !Objects.equals(currentStudentId, honor.getStudentId())) {
+            throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可操作本人荣誉记录");
+        }
     }
 
     // ==================== 辅助方法 ====================

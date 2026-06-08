@@ -34,6 +34,13 @@ public class ScoreController {
         return scoreService.getCourseItemOptionList(dataRequest);
     }
 
+    @Operation(summary = "获取教师授课课程列表（左侧课程列表）")
+    @PostMapping("/getTeacherCourseList")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    public DataResponse getTeacherCourseList(@Valid @RequestBody DataRequest dataRequest) {
+        return scoreService.getTeacherCourseList(dataRequest);
+    }
+
     @Operation(summary = "获取成绩列表")
     @PostMapping("/getScoreList")
     @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")

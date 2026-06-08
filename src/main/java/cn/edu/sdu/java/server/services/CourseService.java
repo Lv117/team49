@@ -27,10 +27,28 @@ public class CourseService {
         String numName = dataRequest.getString("numName");
         if(numName == null)
             numName = "";
-        List<Course> cList = courseRepository.findCourseListByNumName(numName);  //数据库查询操作
+        
+        // 如果传入了 teacherId，只返回该教师授课的课程
+        Integer teacherId = dataRequest.getInteger("teacherId");
+        List<Course> cList;
+        if (teacherId != null) {
+            System.out.println("[COURSE DEBUG] 查询教师授课课程 - teacherId: " + teacherId);
+            cList = courseRepository.findByTeacherPersonPersonId(teacherId);
+            // 如果有搜索关键词，在内存中过滤
+            if (!numName.isEmpty()) {
+                final String keyword = numName.toLowerCase();
+                cList = cList.stream()
+                    .filter(c -> (c.getNum() != null && c.getNum().toLowerCase().contains(keyword)) ||
+                                 (c.getName() != null && c.getName().toLowerCase().contains(keyword)))
+                    .collect(java.util.stream.Collectors.toList());
+            }
+        } else {
+            // 没有 teacherId，使用原有的模糊查询逻辑
+            cList = courseRepository.findCourseListByNumName(numName);
+        }
+        
         List<Map<String,Object>> dataList = new ArrayList<>();
         Map<String,Object> m;
-        Course pc;
         for (Course c : cList) {
             m = new HashMap<>();
             m.put("courseId", c.getCourseId()+"");
@@ -38,11 +56,6 @@ public class CourseService {
             m.put("name",c.getName());
             m.put("credit",c.getCredit()+"");
             m.put("coursePath",c.getCoursePath());
-            pc =c.getPreCourse();
-            if(pc != null) {
-                m.put("preCourse",pc.getName());
-                m.put("preCourseId",pc.getCourseId());
-            }
             // 添加任课教师信息
             if(c.getTeacher() != null) {
                 m.put("teacherId", c.getTeacher().getPersonId());
@@ -55,6 +68,7 @@ public class CourseService {
             m.put("schedule", c.getSchedule());
             dataList.add(m);
         }
+        System.out.println("[COURSE DEBUG] 返回课程数量: " + dataList.size());
         return CommonMethod.getReturnData(dataList);
     }
 
@@ -63,7 +77,6 @@ public class CourseService {
         String num = dataRequest.getString("num");
         String name = dataRequest.getString("name");
         String coursePath = dataRequest.getString("coursePath");
-        Integer preCourseId = dataRequest.getInteger("preCourseId");
         Double credit = dataRequest.getDouble("credit");
         String teacherNumOrId = dataRequest.getString("teacherId");
         String classroom = dataRequest.getString("classroom");
@@ -77,12 +90,6 @@ public class CourseService {
             if (op.isPresent()) c = op.get();
         }
         if (c == null) c = new Course();
-
-        Course pc = null;
-        if (preCourseId != null) {
-            op = courseRepository.findById(preCourseId);
-            if (op.isPresent()) pc = op.get();
-        }
 
         Teacher teacher = null;
         if (teacherNumOrId != null && !teacherNumOrId.isEmpty()) {
@@ -109,15 +116,14 @@ public class CourseService {
         c.setName(name);
         c.setCredit(credit);
         c.setCoursePath(coursePath);
-        c.setPreCourse(pc);
         c.setTeacher(teacher);
         c.setClassroom(classroom);
         c.setSchedule(schedule);
 
-        courseRepository.save(c);
-        return CommonMethod.getReturnMessageOK();
-    }
-    public DataResponse courseDelete(DataRequest dataRequest) {
+         courseRepository.save(c);
+         return CommonMethod.getReturnMessageOK();
+     }
+     public DataResponse courseDelete(DataRequest dataRequest) {
         Integer courseId = dataRequest.getInteger("courseId");
         Optional<Course> op;
         Course c= null;

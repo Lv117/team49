@@ -1,12 +1,14 @@
 package cn.edu.sdu.java.server.services;
 
 import cn.edu.sdu.java.server.models.Course;
+import cn.edu.sdu.java.server.models.CourseSelection;
 import cn.edu.sdu.java.server.models.Homework;
 import cn.edu.sdu.java.server.models.HomeworkSubmission;
 import cn.edu.sdu.java.server.models.Student;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.CourseRepository;
+import cn.edu.sdu.java.server.repositorys.CourseSelectionRepository;
 import cn.edu.sdu.java.server.repositorys.HomeworkRepository;
 import cn.edu.sdu.java.server.repositorys.HomeworkSubmissionRepository;
 import cn.edu.sdu.java.server.repositorys.StudentRepository;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.Arrays;
 
 /**
  * Homework 作业服务类
@@ -31,15 +34,21 @@ public class HomeworkService {
     private final HomeworkSubmissionRepository homeworkSubmissionRepository;
     private final StudentRepository studentRepository;
     private final CourseRepository courseRepository;
+    private final CourseSelectionRepository courseSelectionRepository;
+    private final TeacherDataScopeService teacherDataScopeService;
 
     public HomeworkService(HomeworkRepository homeworkRepository, 
                           HomeworkSubmissionRepository homeworkSubmissionRepository, 
                           StudentRepository studentRepository,
-                          CourseRepository courseRepository) {
+                          CourseRepository courseRepository,
+                          CourseSelectionRepository courseSelectionRepository,
+                          TeacherDataScopeService teacherDataScopeService) {
         this.homeworkRepository = homeworkRepository;
         this.homeworkSubmissionRepository = homeworkSubmissionRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
+        this.courseSelectionRepository = courseSelectionRepository;
+        this.teacherDataScopeService = teacherDataScopeService;
     }
 
     /**
@@ -48,12 +57,88 @@ public class HomeworkService {
     public DataResponse getHomeworkList(DataRequest dataRequest) {
         try {
             Integer courseId = dataRequest.getInteger("courseId");
+            String role = CommonMethod.getRoleName();
+            Integer currentPersonId = CommonMethod.getPersonId();
+            String username = CommonMethod.getUsername();
+            
+            System.out.println("[HOMEWORK DEBUG] ====================");
+            System.out.println("[HOMEWORK DEBUG] 查询作业列表");
+            System.out.println("[HOMEWORK DEBUG] 用户名: " + username);
+            System.out.println("[HOMEWORK DEBUG] 角色: " + role);
+            System.out.println("[HOMEWORK DEBUG] personId: " + currentPersonId);
+            System.out.println("[HOMEWORK DEBUG] courseId参数: " + courseId);
+            System.out.println("[HOMEWORK DEBUG] ====================");
+            
             List<Homework> homeworkList;
 
-            if (courseId != null) {
-                homeworkList = homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(courseId);
+            // 根据角色过滤作业
+            if ("ROLE_STUDENT".equals(role)) {
+                // 学生只能查看自己已选课程的作业
+                if (currentPersonId == null) {
+                    log.warn("学生权限验证失败：currentPersonId为null");
+                    return CommonMethod.getReturnMessageError("登录状态无效，请重新登录");
+                }
+                            
+                log.info("学生[{}]查询作业列表，currentPersonId={}", role, currentPersonId);
+                            
+                // 获取学生已选的课程ID列表，只包括状态为"已选"或"已完成"的课程
+                List<CourseSelection> selections = courseSelectionRepository.findByStudentPersonIdAndStatusIn(currentPersonId, Arrays.asList("已选", "已完成"));
+                log.info("学生[{}]已选课程数量：{}", currentPersonId, selections.size());
+                            
+                Set<Integer> selectedCourseIds = new HashSet<>();
+                for (CourseSelection cs : selections) {
+                    selectedCourseIds.add(cs.getCourse().getCourseId());
+                    log.info("学生[{}]已选课程：courseId={}, courseName={}, status={}", 
+                        currentPersonId, cs.getCourse().getCourseId(), cs.getCourse().getName(), cs.getStatus());
+                }
+                
+                if (selectedCourseIds.isEmpty()) {
+                    // 学生没有选任何课程，返回空列表
+                    return CommonMethod.getReturnData(new ArrayList<>());
+                }
+                
+                // 如果指定了courseId，验证是否在该学生已选课程中
+                if (courseId != null) {
+                    if (!selectedCourseIds.contains(courseId)) {
+                        return CommonMethod.getReturnMessageError("您未选择该课程，无法查看作业");
+                    }
+                    homeworkList = homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(courseId);
+                } else {
+                    // 获取所有已选课程的作业
+                    homeworkList = new ArrayList<>();
+                    for (Integer cid : selectedCourseIds) {
+                        homeworkList.addAll(homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(cid));
+                    }
+                }
+            } else if ("ROLE_TEACHER".equals(role)) {
+                // 教师只能查看自己授课课程的作业
+                Set<Integer> teacherCourseIds = teacherDataScopeService.getCurrentTeacherCourseIds();
+                
+                if (teacherCourseIds.isEmpty()) {
+                    // 教师没有授课课程，返回空列表
+                    return CommonMethod.getReturnData(new ArrayList<>());
+                }
+                
+                // 如果指定了courseId，验证是否在该教师授课课程中
+                if (courseId != null) {
+                    if (!teacherCourseIds.contains(courseId)) {
+                        return CommonMethod.getReturnMessageError("您未教授该课程，无法查看作业");
+                    }
+                    homeworkList = homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(courseId);
+                } else {
+                    // 获取所有授课课程的作业
+                    homeworkList = new ArrayList<>();
+                    for (Integer cid : teacherCourseIds) {
+                        homeworkList.addAll(homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(cid));
+                    }
+                }
             } else {
-                homeworkList = homeworkRepository.findAll();
+                // 管理员可以查看所有作业
+                if (courseId != null) {
+                    homeworkList = homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(courseId);
+                } else {
+                    homeworkList = homeworkRepository.findAll();
+                }
             }
 
             List<Map<String, Object>> list = new ArrayList<>();
@@ -125,11 +210,21 @@ public class HomeworkService {
                 return CommonMethod.getReturnMessageError("日期格式错误，请使用 yyyy-MM-ddTHH:mm:ss 格式");
             }
 
+            // 验证教师权限：教师只能布置自己授课课程的作业
+            String role = CommonMethod.getRoleName();
+            if ("ROLE_TEACHER".equals(role)) {
+                teacherDataScopeService.assertCurrentTeacherAccessCourse(courseId, "您未教授该课程，无法布置作业");
+            }
+
             Homework homework;
             if (homeworkId != null) {
                 homework = homeworkRepository.findById(homeworkId).orElse(null);
                 if (homework == null) {
                     return CommonMethod.getReturnMessageError("作业不存在");
+                }
+                // 编辑时也要验证权限
+                if ("ROLE_TEACHER".equals(role)) {
+                    teacherDataScopeService.assertCurrentTeacherAccessCourse(homework.getCourse().getCourseId(), "您无权编辑该作业");
                 }
             } else {
                 homework = new Homework();
@@ -167,8 +262,15 @@ public class HomeworkService {
                 return CommonMethod.getReturnMessageError("作业 ID 不能为空");
             }
 
-            if (!homeworkRepository.existsById(homeworkId)) {
+            Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
+            if (homework == null) {
                 return CommonMethod.getReturnMessageError("作业不存在");
+            }
+
+            // 验证教师权限：教师只能删除自己授课课程的作业
+            String role = CommonMethod.getRoleName();
+            if ("ROLE_TEACHER".equals(role)) {
+                teacherDataScopeService.assertCurrentTeacherAccessCourse(homework.getCourse().getCourseId(), "您无权删除该作业");
             }
 
             // 先删除该作业的所有提交记录，再删除作业本身
@@ -193,9 +295,37 @@ public class HomeworkService {
                 return CommonMethod.getReturnMessageError("提交记录 ID 不能为空");
             }
 
-            if (!homeworkSubmissionRepository.existsById(submissionId)) {
+            HomeworkSubmission submission = homeworkSubmissionRepository.findById(submissionId).orElse(null);
+            if (submission == null) {
                 return CommonMethod.getReturnMessageError("提交记录不存在");
             }
+
+            // 验证权限
+            String role = CommonMethod.getRoleName();
+            Integer currentPersonId = CommonMethod.getPersonId();
+            
+            if ("ROLE_STUDENT".equals(role)) {
+                // 学生只能删除自己的提交记录
+                if (currentPersonId == null || !currentPersonId.equals(submission.getStudent().getPersonId())) {
+                    return CommonMethod.getReturnMessageError("您只能删除自己的提交记录");
+                }
+                
+                // 验证学生是否已选该课程
+                List<CourseSelection> selections = courseSelectionRepository.findByStudentPersonIdAndStatusIn(currentPersonId, Arrays.asList("已选", "已完成"));
+                boolean hasSelected = selections.stream()
+                    .anyMatch(cs -> cs.getCourse().getCourseId().equals(submission.getHomework().getCourse().getCourseId()));
+                
+                if (!hasSelected) {
+                    return CommonMethod.getReturnMessageError("您未选择该课程，无法删除提交记录");
+                }
+            } else if ("ROLE_TEACHER".equals(role)) {
+                // 教师只能删除自己授课课程的提交记录
+                teacherDataScopeService.assertCurrentTeacherAccessCourse(
+                    submission.getHomework().getCourse().getCourseId(), 
+                    "您无权删除该课程的提交记录"
+                );
+            }
+            // 管理员可以删除任何提交记录
 
             homeworkSubmissionRepository.deleteById(submissionId);
 
@@ -213,16 +343,74 @@ public class HomeworkService {
         try {
             Integer homeworkId = dataRequest.getInteger("homeworkId");
             Integer studentId = dataRequest.getInteger("studentId");
+            String role = CommonMethod.getRoleName();
+            Integer currentPersonId = CommonMethod.getPersonId();
             List<HomeworkSubmission> submissionList;
 
-            if (homeworkId != null && studentId != null) {
-                submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkIdAndStudentPersonId(homeworkId, studentId);
-            } else if (homeworkId != null) {
-                submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkId(homeworkId);
-            } else if (studentId != null) {
-                submissionList = homeworkSubmissionRepository.findByStudentPersonIdOrderBySubmitTimeDesc(studentId);
+            // 根据角色进行权限控制
+            if ("ROLE_STUDENT".equals(role)) {
+                // 学生只能查看自己的提交记录
+                if (currentPersonId == null) {
+                    return CommonMethod.getReturnMessageError("登录状态无效，请重新登录");
+                }
+                
+                if (studentId != null && !studentId.equals(currentPersonId)) {
+                    return CommonMethod.getReturnMessageError("您只能查看自己的提交记录");
+                }
+                
+                // 如果指定了homeworkId，验证学生是否已选该课程
+                if (homeworkId != null) {
+                    Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
+                    if (homework != null) {
+                        List<CourseSelection> selections = courseSelectionRepository.findByStudentPersonIdAndStatusIn(currentPersonId, Arrays.asList("已选", "已完成"));
+                        boolean hasSelected = selections.stream()
+                            .anyMatch(cs -> cs.getCourse().getCourseId().equals(homework.getCourse().getCourseId()));
+                        
+                        if (!hasSelected) {
+                            return CommonMethod.getReturnMessageError("您未选择该课程，无法查看提交记录");
+                        }
+                    }
+                }
+                
+                // 学生只能查看自己的提交记录
+                if (homeworkId != null) {
+                    submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkIdAndStudentPersonId(homeworkId, currentPersonId);
+                } else {
+                    submissionList = homeworkSubmissionRepository.findByStudentPersonIdOrderBySubmitTimeDesc(currentPersonId);
+                }
+            } else if ("ROLE_TEACHER".equals(role)) {
+                // 教师只能查看自己授课课程的提交记录
+                if (homeworkId != null) {
+                    Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
+                    if (homework != null) {
+                        teacherDataScopeService.assertCurrentTeacherAccessCourse(homework.getCourse().getCourseId(), "您未教授该课程，无法查看提交记录");
+                    }
+                    submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkId(homeworkId);
+                } else if (studentId != null) {
+                    teacherDataScopeService.assertCurrentTeacherAccessStudent(studentId, "您无权查看该学生的提交记录");
+                    submissionList = homeworkSubmissionRepository.findByStudentPersonIdOrderBySubmitTimeDesc(studentId);
+                } else {
+                    // 教师查看所有自己授课课程的提交记录
+                    Set<Integer> teacherCourseIds = teacherDataScopeService.getCurrentTeacherCourseIds();
+                    submissionList = new ArrayList<>();
+                    for (Integer courseId : teacherCourseIds) {
+                        List<Homework> homeworks = homeworkRepository.findByCourseCourseIdOrderByCreateTimeDesc(courseId);
+                        for (Homework hw : homeworks) {
+                            submissionList.addAll(homeworkSubmissionRepository.findByHomeworkHomeworkId(hw.getHomeworkId()));
+                        }
+                    }
+                }
             } else {
-                submissionList = homeworkSubmissionRepository.findAll();
+                // 管理员可以查看所有提交记录
+                if (homeworkId != null && studentId != null) {
+                    submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkIdAndStudentPersonId(homeworkId, studentId);
+                } else if (homeworkId != null) {
+                    submissionList = homeworkSubmissionRepository.findByHomeworkHomeworkId(homeworkId);
+                } else if (studentId != null) {
+                    submissionList = homeworkSubmissionRepository.findByStudentPersonIdOrderBySubmitTimeDesc(studentId);
+                } else {
+                    submissionList = homeworkSubmissionRepository.findAll();
+                }
             }
 
             List<Map<String, Object>> list = new ArrayList<>();
@@ -275,6 +463,24 @@ public class HomeworkService {
             Homework homework = homeworkRepository.findById(homeworkId).orElse(null);
             if (homework == null) {
                 return CommonMethod.getReturnMessageError("作业不存在");
+            }
+
+            // 验证学生权限：学生只能提交已选课程的作业
+            String role = CommonMethod.getRoleName();
+            if ("ROLE_STUDENT".equals(role)) {
+                Integer currentPersonId = CommonMethod.getPersonId();
+                if (currentPersonId == null || !currentPersonId.equals(studentId)) {
+                    return CommonMethod.getReturnMessageError("您只能提交自己的作业");
+                }
+                
+                // 验证学生是否已选该课程，只包括状态为"已选"或"已完成"的课程
+                List<CourseSelection> selections = courseSelectionRepository.findByStudentPersonIdAndCourseCourseId(studentId, homework.getCourse().getCourseId());
+                boolean hasSelected = selections.stream()
+                    .anyMatch(cs -> "已选".equals(cs.getStatus()) || "已完成".equals(cs.getStatus()));
+                
+                if (!hasSelected) {
+                    return CommonMethod.getReturnMessageError("您未选择该课程，无法提交作业");
+                }
             }
 
             // 检查是否已过截止时间
@@ -341,6 +547,17 @@ public class HomeworkService {
             HomeworkSubmission submission = homeworkSubmissionRepository.findById(submissionId).orElse(null);
             if (submission == null) {
                 return CommonMethod.getReturnMessageError("提交记录不存在");
+            }
+
+            // 验证教师权限：只有教师和管理员可以批改作业
+            String role = CommonMethod.getRoleName();
+            if ("ROLE_TEACHER".equals(role)) {
+                teacherDataScopeService.assertCurrentTeacherAccessCourse(
+                    submission.getHomework().getCourse().getCourseId(), 
+                    "您无权批改该课程的作业"
+                );
+            } else if ("ROLE_STUDENT".equals(role)) {
+                return CommonMethod.getReturnMessageError("学生无权批改作业");
             }
 
             // 检查分数是否超过满分

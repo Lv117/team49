@@ -72,6 +72,11 @@ public class ExamController {
             String courseName = req.getString("courseName");
             String keyword = req.getString("keyword");
 
+            // 如果没有传 yearSemesterId，默认查所有学期（传 0）
+            if (yearSemesterId == null) {
+                yearSemesterId = 0;
+            }
+
             List<Map<String, Object>> examScheduleList = examScheduleService.getExamScheduleList(yearSemesterId, courseName, keyword);
             return new DataResponse(0, examScheduleList, "success");
         } catch (Exception e) {
@@ -93,6 +98,11 @@ public class ExamController {
             Integer yearSemesterId = req.getInteger("yearSemesterId");
             Integer courseId = req.getInteger("courseId");
 
+            // 如果前端没传学年学期，默认使用 6（2025-2026学年第二学期）
+            if (yearSemesterId == null) {
+                yearSemesterId = 6;
+            }
+
             ExamSchedule examSchedule;
             if (examId != null) {
                 examSchedule = new ExamSchedule();
@@ -103,7 +113,7 @@ public class ExamController {
 
             examSchedule.setCourseName(courseName);
             examSchedule.setTeacher(teacher);
-            examSchedule.setExamTime(LocalDate.parse(examTimeStr));
+            examSchedule.setExamTime(examTimeStr); // 直接保存字符串，支持 "2026-06-18" 或 "2026-06-18 第1-2节(8:00-9:50)"
             examSchedule.setExamRoom(examRoom);
             examSchedule.setYearSemesterId(yearSemesterId);
             examSchedule.setCourseId(courseId);
@@ -135,8 +145,9 @@ public class ExamController {
         try {
             String studentId = req.getString("studentId");
             Integer yearSemesterId = req.getInteger("yearSemesterId");
+            String courseName = req.getString("courseName");
 
-            List<Map<String, Object>> examScheduleList = examScheduleService.getStudentExamScheduleList(studentId, yearSemesterId);
+            List<Map<String, Object>> examScheduleList = examScheduleService.getStudentExamScheduleList(studentId, yearSemesterId, courseName);
             return new DataResponse(0, examScheduleList, "success");
         } catch (Exception e) {
             e.printStackTrace();

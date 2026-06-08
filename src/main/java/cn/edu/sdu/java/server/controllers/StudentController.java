@@ -9,6 +9,7 @@ import cn.edu.sdu.java.server.services.CourseMaterialService;
 import cn.edu.sdu.java.server.services.ResumeService;
 import cn.edu.sdu.java.server.services.ScoreCalculationService;
 import cn.edu.sdu.java.server.services.StudentService;
+import cn.edu.sdu.java.server.util.CommonMethod;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -60,7 +61,7 @@ public class StudentController {
 
     @Operation(summary = "查询学生列表")
     @PostMapping("/getStudentList")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse getStudentList(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.getStudentList(dataRequest);
     }
@@ -90,7 +91,7 @@ public class StudentController {
 
     @Operation(summary = "查询学生详情")
     @PostMapping("/getStudentInfo")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
     public DataResponse getStudentInfo(@Valid @RequestBody DataRequest dataRequest) {
         return studentService.getStudentInfo(dataRequest);
     }
@@ -349,6 +350,16 @@ public class StudentController {
     }
 
     /**
+     * 获取月度消费趋势(近12个月)
+     */
+    @Operation(summary = "获取月度消费趋势")
+    @PostMapping("/getMonthlyConsumptionTrend")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse getMonthlyConsumptionTrend(@Valid @RequestBody DataRequest dataRequest) {
+        return consumptionService.getMonthlyConsumptionTrend(dataRequest);
+    }
+
+    /**
      * Excel批量导入消费数据
      */
     @Operation(summary = "Excel批量导入消费数据")
@@ -394,6 +405,10 @@ public class StudentController {
         if (studentId == null) {
             studentId = dataRequest.getInteger("personId");
         }
+        // 回退到 JWT 中的当前用户（与 previewResumeData 保持一致）
+        if (studentId == null || studentId <= 0) {
+            studentId = CommonMethod.getPersonId();
+        }
         
         if (studentId == null || studentId <= 0) {
             return new DataResponse(1, null, "学生ID不能为空");
@@ -414,7 +429,7 @@ public class StudentController {
      */
     @Operation(summary = "获取所有学生绩分排名")
     @PostMapping("/getScoreRanking")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse getScoreRanking(@Valid @RequestBody DataRequest dataRequest) {
         return scoreCalculationService.getScoreRanking();
     }

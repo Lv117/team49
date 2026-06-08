@@ -67,7 +67,7 @@ public class HonorActivityController {
      */
     @Operation(summary = "审批荣誉奖励")
     @PostMapping("/honorApprove")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
     public DataResponse honorApprove(@Valid @RequestBody DataRequest dataRequest) {
         return honorActivityService.honorApprove(dataRequest);
     }
@@ -99,7 +99,7 @@ public class HonorActivityController {
      */
     @Operation(summary = "保存日常活动")
     @PostMapping("/dailyActivitySave")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse dailyActivitySave(@Valid @RequestBody DataRequest dataRequest) {
         return honorActivityService.dailyActivitySave(dataRequest);
     }
@@ -109,7 +109,7 @@ public class HonorActivityController {
      */
     @Operation(summary = "删除日常活动")
     @PostMapping("/dailyActivityDelete")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse dailyActivityDelete(@Valid @RequestBody DataRequest dataRequest) {
         return honorActivityService.dailyActivityDelete(dataRequest);
     }

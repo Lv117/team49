@@ -21,7 +21,7 @@ public class StudentLeaveController {
     }
     @Operation(summary = "Get teacher option list")
     @PostMapping("/getTeacherItemOptionList")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('STUDENT') or hasRole('ADMIN')")
     public OptionItemList getTeacherItemOptionList(@Valid @RequestBody DataRequest dataRequest) {
         return studentLeaveService.getTeacherItemOptionList(dataRequest);
     }
@@ -39,16 +39,23 @@ public class StudentLeaveController {
     }
     @Operation(summary = "教师审批请假申请")
     @PostMapping("/studentLeaveCheck")
-    @PreAuthorize("hasRole('TEACHER')")
+    @PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")
     public DataResponse studentLeaveCheck(@Valid @RequestBody DataRequest dataRequest) {
         return studentLeaveService.studentLeaveCheck(dataRequest);
     }
 
-    @Operation(summary = "学生返校报备")
+    @Operation(summary = "学生申请销假")
     @PostMapping("/studentReturn")
     @PreAuthorize("hasRole('STUDENT')")
     public DataResponse studentReturn(@Valid @RequestBody DataRequest dataRequest) {
-        return studentLeaveService.studentReturn(dataRequest);
+        return studentLeaveService.applyStudentReturn(dataRequest);
+    }
+
+    @Operation(summary = "管理员/教师审批销假申请")
+    @PostMapping("/studentReturnCheck")
+    @PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")
+    public DataResponse studentReturnCheck(@Valid @RequestBody DataRequest dataRequest) {
+        return studentLeaveService.studentReturnCheck(dataRequest);
     }
 
     @Operation(summary = "Get leave progress")
@@ -63,6 +70,13 @@ public class StudentLeaveController {
     @PreAuthorize("hasRole('ADMIN')")
     public DataResponse syncLeaveWithAttendance(@Valid @RequestBody DataRequest dataRequest) {
         return studentLeaveService.syncLeaveWithAttendance(dataRequest);
+    }
+
+    @Operation(summary = "Delete student leave record")
+    @PostMapping("/deleteStudentLeave")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
+    public DataResponse deleteStudentLeave(@Valid @RequestBody DataRequest dataRequest) {
+        return studentLeaveService.deleteStudentLeave(dataRequest);
     }
 
 }

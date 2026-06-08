@@ -49,4 +49,16 @@ public interface FeeRepository extends JpaRepository<Fee, Integer> {
      */
     @Query(value = "from Fee where student.personId = :personId order by day desc")
     List<Fee> findByStudentId(@Param("personId") Integer personId);
+
+    /**
+     * 查询指定学生指定日期范围之后的消费记录(用于月度趋势)
+     */
+    @Query(value = "from Fee where student.personId = :personId and day >= :startDate order by day asc")
+    List<Fee> findByStudentAndStartDate(@Param("personId") Integer personId, @Param("startDate") String startDate);
+
+    /**
+     * 查询指定日期范围之后的所有消费记录(用于管理员/教师查看全量月度趋势)
+     */
+    @Query(value = "from Fee where day >= :startDate order by day asc")
+    List<Fee> findAllFromStartDate(@Param("startDate") String startDate);
 }

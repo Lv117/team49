@@ -15,7 +15,7 @@ public class ExamSchedule {
     private String teacher;
 
     @Column(name = "exam_time")
-    private LocalDate examTime;
+    private String examTime;
 
     @Column(name = "exam_room")
     private String examRoom;
@@ -51,11 +51,11 @@ public class ExamSchedule {
         this.teacher = teacher;
     }
 
-    public LocalDate getExamTime() {
+    public String getExamTime() {
         return examTime;
     }
 
-    public void setExamTime(LocalDate examTime) {
+    public void setExamTime(String examTime) {
         this.examTime = examTime;
     }
 

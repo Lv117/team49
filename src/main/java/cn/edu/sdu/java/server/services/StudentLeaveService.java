@@ -57,12 +57,82 @@ public class StudentLeaveService {
         String search = dataRequest.getString("search");
         if(search == null)
             search = "";
+        String studentNum = dataRequest.getString("studentNum");
+        if(studentNum == null)
+            studentNum = "";
+        Integer teacherId = dataRequest.getInteger("teacherId");
+        
+        // 调试日志
+        System.out.println("[DEBUG] ========== 请假查询开始 ==========");
+        System.out.println("[DEBUG] 请假查询参数 - 角色: " + roleName + ", 用户名: " + userName 
+            + ", state: " + state + ", search: " + search 
+            + ", studentNum: " + studentNum + ", teacherId: " + teacherId);
+        
+        // 测试：先查全部记录
+        List<StudentLeave> allLeaves = studentLeaveRepository.findAll();
+        System.out.println("[DEBUG] 数据库中总共有 " + allLeaves.size() + " 条请假记录");
+        if (!allLeaves.isEmpty()) {
+            for (int i = 0; i < Math.min(3, allLeaves.size()); i++) {
+                StudentLeave sl = allLeaves.get(i);
+                System.out.println("[DEBUG] 记录" + (i+1) + " ID=" + sl.getStudentLeaveId() 
+                    + ", studentId=" + (sl.getStudent() != null ? sl.getStudent().getPersonId() : "null")
+                    + ", student.person.num=" + (sl.getStudent() != null && sl.getStudent().getPerson() != null ? sl.getStudent().getPerson().getNum() : "null")
+                    + ", state=" + sl.getState());
+            }
+        }
+
+        // 处理特殊请假进度：4=未返校(state=1且已逾期), 5=待返校(state=1且未逾期)
+        Integer queryState = state;
+        boolean filterOverdue = (state != null && state == 4);  // true=筛选已逾期, false=筛选未逾期
+        boolean applyDateFilter = (state != null && (state == 4 || state == 5));
+        if (state != null && (state == 4 || state == 5)) {
+            queryState = 1;
+        }
+
         List<StudentLeave> slList = switch (roleName) {
-            case "ROLE_STUDENT" -> studentLeaveRepository.getStudentLeaveList(-1, search, userName, "");
-            case "ROLE_TEACHER" -> studentLeaveRepository.getStudentLeaveList(-1, search, "", userName);
-            case "ROLE_ADMIN" -> studentLeaveRepository.getStudentLeaveList(state, search, "", "");
+            // 学生角色：查询自己的记录，search参数用于前端搜索（但学生只看自己的，所以search传空）
+            case "ROLE_STUDENT" -> studentLeaveRepository.getStudentLeaveList(-1, "", userName, "", null);
+            // 教师角色：查询关联自己的记录，search参数用于匹配学生姓名或学号
+            case "ROLE_TEACHER" -> studentLeaveRepository.getStudentLeaveList(-1, search, "", userName, null);
+            // 管理员角色：search参数用于匹配学生姓名或学号，studentNum传空（不使用精确匹配）
+            case "ROLE_ADMIN" -> {
+                System.out.println("[DEBUG] 执行管理员查询 - queryState: " + queryState + ", search: " + search + ", teacherId: " + teacherId);
+                // studentNum 传空字符串，让查询只使用 search 进行模糊匹配
+                yield studentLeaveRepository.getStudentLeaveList(queryState, search, "", "", teacherId);
+            }
             case null, default -> throw new BusinessException(ErrorCodes.LEAVE_ROLE_INVALID, "当前角色无法查询请假记录");
         };
+        
+        System.out.println("[DEBUG] 查询结果数量: " + (slList != null ? slList.size() : 0));
+        if (slList != null && !slList.isEmpty()) {
+            for (int i = 0; i < Math.min(3, slList.size()); i++) {
+                StudentLeave sl = slList.get(i);
+                System.out.println("[DEBUG] 记录" + (i+1) + " - 学生ID: " + (sl.getStudent() != null ? sl.getStudent().getPersonId() : "null") + ", 学号: " + (sl.getStudent() != null && sl.getStudent().getPerson() != null ? sl.getStudent().getPerson().getNum() : "null") + ", 姓名: " + (sl.getStudent() != null && sl.getStudent().getPerson() != null ? sl.getStudent().getPerson().getName() : "null"));
+            }
+        }
+
+        // 对"未返校"和"待返校"进行日期过滤
+        if (applyDateFilter && slList != null) {
+            LocalDate today = LocalDate.now();
+            slList = slList.stream().filter(sl -> {
+                String leaveDate = sl.getLeaveDate();
+                if (leaveDate == null || !leaveDate.contains("至")) return false;
+                try {
+                    String endDateStr = leaveDate.split("至")[1].trim();
+                    LocalDate endDate = LocalDate.parse(endDateStr);
+                    if (filterOverdue) {
+                        // 未返校：结束日期已过
+                        return today.isAfter(endDate);
+                    } else {
+                        // 待返校：结束日期未过（含当天）
+                        return !today.isAfter(endDate);
+                    }
+                } catch (Exception e) {
+                    return false;
+                }
+            }).toList();
+        }
+
         List<Map<String, Object>> dataList = new ArrayList<>();
         Map<String, Object> map;
         Student s;
@@ -84,6 +154,7 @@ public class StudentLeaveService {
                 map.put("leaveDate", sl.getLeaveDate());
                 map.put("teacherId", t != null ? t.getPersonId() : null);
                 map.put("teacherComment", sl.getTeacherComment());
+                map.put("adminComment", sl.getAdminComment());
                 map.put("returnTime", sl.getReturnTime());
                 dataList.add(map);
             }
@@ -155,17 +226,18 @@ public class StudentLeaveService {
         studentLeaveRepository.save(sl);
         return CommonMethod.getReturnMessageOK();
     }
-    // 教师审批：通过→state=1，驳回→state=2。
-    // 安全约定：仅接收 id + state + teacherComment 三个字段，其余字段一概忽略。
-    // 从数据库查出原记录后，只更新审批相关的三个字段，绝不触碰学生提交的原始数据。
+    // 教师/管理员审批：通过→state=1，驳回→state=2。
+    // 安全约定：仅接收 id + state + comment 三个字段，其余字段一概忽略。
+    // 从数据库查出原记录后，只更新审批相关的字段，绝不触碰学生提交的原始数据。
+    // 教师审批使用 teacherComment 和 teacherTime，管理员审批使用 adminComment 和 adminTime
     public DataResponse studentLeaveCheck(DataRequest dataRequest) {
         String roleName = CommonMethod.getRoleName();
         Integer state = dataRequest.getInteger("state");
         Integer studentLeaveId = dataRequest.getInteger("studentLeaveId");
-        String teacherComment = dataRequest.getString("teacherComment");
+        String comment = dataRequest.getString("teacherComment");
 
-        if(!"ROLE_TEACHER".equals(roleName)) {
-            throw new BusinessException(ErrorCodes.LEAVE_ROLE_INVALID, "仅教师可审批请假申请");
+        if(!"ROLE_TEACHER".equals(roleName) && !"ROLE_ADMIN".equals(roleName)) {
+            throw new BusinessException(ErrorCodes.LEAVE_ROLE_INVALID, "仅教师和管理员可审批请假申请");
         }
         if(state == null || (state != 1 && state != 2)) {
             throw new BusinessException(ErrorCodes.LEAVE_STATUS_INVALID, "审批结果无效，仅允许通过(state=1)或驳回(state=2)");
@@ -183,8 +255,18 @@ public class StudentLeaveService {
 
         // 仅更新审批相关字段，其余字段（学生信息、日期、理由等）从原记录保留
         sl.setState(state);
-        sl.setTeacherComment(teacherComment);
-        sl.setTeacherTime(new Date());
+        
+        // 根据角色分别记录审批信息
+        if("ROLE_ADMIN".equals(roleName)) {
+            // 管理员审批
+            sl.setAdminComment(comment);
+            sl.setAdminTime(new Date());
+        } else {
+            // 教师审批
+            sl.setTeacherComment(comment);
+            sl.setTeacherTime(new Date());
+        }
+        
         studentLeaveRepository.save(sl);
         return CommonMethod.getReturnMessageOK();
     }
@@ -235,21 +317,44 @@ public class StudentLeaveService {
         step1.put("comment", sl.getReason() != null ? sl.getReason() : "");
         progressList.add(step1);
 
-        // Step 2: 教师审批 — comment 严格使用 teacherComment，绝不取 reason
+        // Step 2: 审批阶段 — 优先显示管理员审批，如果没有则显示教师审批
         Map<String, Object> step2 = new HashMap<>();
         step2.put("step", 2);
-        step2.put("stage", "教师审批");
-        step2.put("operator", getTeacherName(sl.getTeacher()));
-        if(sl.getState() != null && sl.getState() >= 1 && sl.getTeacherTime() != null) {
-            step2.put("timestamp", sdf.format(sl.getTeacherTime()));
-            String tc = sl.getTeacherComment() != null && !sl.getTeacherComment().isEmpty()
-                    ? sl.getTeacherComment() : "暂无意见";
-            step2.put("comment", tc);
-            step2.put("status", sl.getState() == 2 ? "rejected" : "completed");
+        
+        // 判断是管理员审批还是教师审批
+        boolean hasAdminApproval = sl.getAdminTime() != null;
+        boolean hasTeacherApproval = sl.getTeacherTime() != null;
+        
+        if (hasAdminApproval) {
+            // 管理员审批
+            step2.put("stage", "管理员审批");
+            step2.put("operator", "管理员");
+            if(sl.getState() != null && sl.getState() >= 1) {
+                step2.put("timestamp", sdf.format(sl.getAdminTime()));
+                String ac = sl.getAdminComment() != null && !sl.getAdminComment().isEmpty()
+                        ? sl.getAdminComment() : "暂无意见";
+                step2.put("comment", ac);
+                step2.put("status", sl.getState() == 2 ? "rejected" : "completed");
+            } else {
+                step2.put("timestamp", "");
+                step2.put("status", "pending");
+                step2.put("comment", "待审批");
+            }
         } else {
-            step2.put("timestamp", "");
-            step2.put("status", "pending");
-            step2.put("comment", "待审批");
+            // 教师审批
+            step2.put("stage", "教师审批");
+            step2.put("operator", getTeacherName(sl.getTeacher()));
+            if(sl.getState() != null && sl.getState() >= 1 && hasTeacherApproval) {
+                step2.put("timestamp", sdf.format(sl.getTeacherTime()));
+                String tc = sl.getTeacherComment() != null && !sl.getTeacherComment().isEmpty()
+                        ? sl.getTeacherComment() : "暂无意见";
+                step2.put("comment", tc);
+                step2.put("status", sl.getState() == 2 ? "rejected" : "completed");
+            } else {
+                step2.put("timestamp", "");
+                step2.put("status", "pending");
+                step2.put("comment", "待审批");
+            }
         }
         progressList.add(step2);
 
@@ -295,29 +400,130 @@ public class StudentLeaveService {
     }
 
     /**
-     * 请假审批通过后同步到考勤系统
-     * 根据请假日期范围批量创建Attendance记录
+     * 删除请假记录（管理员、教师可操作，学生只能删除自己的待审批记录）
      */
-    public DataResponse syncLeaveWithAttendance(DataRequest dataRequest) {
+    public DataResponse deleteStudentLeave(DataRequest dataRequest) {
+        String roleName = CommonMethod.getRoleName();
+        String username = CommonMethod.getUsername();
+        
         Integer studentLeaveId = dataRequest.getInteger("studentLeaveId");
         if(studentLeaveId == null || studentLeaveId <= 0) {
             throw new BusinessException(ErrorCodes.LEAVE_RECORD_NOT_FOUND, "请假ID不能为空");
         }
-        
+
         StudentLeave sl = studentLeaveRepository.findById(studentLeaveId)
                 .orElseThrow(() -> new BusinessException(ErrorCodes.LEAVE_RECORD_NOT_FOUND, "请假记录不存在"));
 
-        if (sl.getLeaveDate() == null || sl.getLeaveDate().isBlank()) {
-            throw new BusinessException(ErrorCodes.LEAVE_DATE_INVALID, "请假日期为空，无法同步到考勤系统");
+        // 学生角色：只能删除自己的待审批(state=0)记录
+        if("ROLE_STUDENT".equals(roleName)) {
+            // 验证是否是学生自己的记录
+            if(sl.getStudent() == null || !username.equals(sl.getStudent().getPerson().getNum())) {
+                throw new BusinessException(ErrorCodes.LEAVE_ROLE_INVALID, "只能删除自己的请假记录");
+            }
+            // 验证是否处于待审批状态
+            if(sl.getState() == null || sl.getState() != 0) {
+                throw new BusinessException(ErrorCodes.LEAVE_STATUS_INVALID, "只能删除待审批状态的请假记录");
+            }
+        } 
+        // 教师和管理员可以删除任何记录
+        else if(!"ROLE_ADMIN".equals(roleName) && !"ROLE_TEACHER".equals(roleName)) {
+            throw new BusinessException(ErrorCodes.LEAVE_ROLE_INVALID, "无权删除请假记录");
         }
-        if (sl.getStudent() == null) {
-            throw new BusinessException(ErrorCodes.LEAVE_DATA_INCOMPLETE, "请假记录缺少学生信息，无法同步到考勤系统");
+
+        studentLeaveRepository.delete(sl);
+        return CommonMethod.getReturnMessageOK();
+    }
+
+    /**
+     * 学生申请销假（替代原来的直接销假）
+     * 流程：学生申请销假 → state变为4(待销假审批) → 管理员/教师审批 → 通过则state=3(已返校)
+     */
+    public DataResponse applyStudentReturn(DataRequest dataRequest) {
+        Integer studentLeaveId = dataRequest.getInteger("studentLeaveId");
+        if(studentLeaveId == null) {
+            throw new BusinessException(ErrorCodes.LEAVE_DATA_INCOMPLETE, "请假记录ID不能为空");
         }
         
-        // 教师审批通过后即可同步到考勤
-        if(sl.getState() == null || sl.getState() < 1) {
-            throw new BusinessException(ErrorCodes.LEAVE_STATUS_INVALID, "请假未审批通过，无法同步到考勤系统");
+        StudentLeave sl = studentLeaveRepository.findById(studentLeaveId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.LEAVE_RECORD_NOT_FOUND, "请假记录不存在"));
+        
+        // 验证状态：只有请假中(state=1)才能申请销假
+        if(sl.getState() == null || sl.getState() != 1) {
+            throw new BusinessException(ErrorCodes.LEAVE_STATUS_INVALID, "只有请假中的记录才能申请销假");
         }
+        
+        // 更新状态为待销假审批
+        // 注：不再拦截逾期申请，允许逾期后申请销假，最终显示为"已归"或"晚归"
+        sl.setState(4);
+        sl.setReturnTime(new Date()); // 记录申请时间
+        studentLeaveRepository.save(sl);
+        
+        return CommonMethod.getReturnMessageOK("销假申请已提交，等待审批");
+    }
+    
+    /**
+     * 管理员/教师审批销假申请
+     */
+    public DataResponse studentReturnCheck(DataRequest dataRequest) {
+        Integer studentLeaveId = dataRequest.getInteger("studentLeaveId");
+        Integer state = dataRequest.getInteger("state"); // 1=同意，2=驳回
+        String comment = dataRequest.getString("comment");
+        
+        if(studentLeaveId == null) {
+            throw new BusinessException(ErrorCodes.LEAVE_DATA_INCOMPLETE, "请假记录ID不能为空");
+        }
+        if(state == null || (state != 1 && state != 2)) {
+            throw new BusinessException(ErrorCodes.LEAVE_DATA_INCOMPLETE, "审批状态必须为1(同意)或2(驳回)");
+        }
+        
+        StudentLeave sl = studentLeaveRepository.findById(studentLeaveId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.LEAVE_RECORD_NOT_FOUND, "请假记录不存在"));
+        
+        // 验证状态：只有待销假审批(state=4)才能审批
+        if(sl.getState() == null || sl.getState() != 4) {
+            throw new BusinessException(ErrorCodes.LEAVE_STATUS_INVALID, "该记录不在待销假审批状态");
+        }
+        
+        String username = CommonMethod.getUsername();
+        String role = CommonMethod.getRoleName();
+        
+        if (state == 1) {
+            // 同意销假
+            sl.setState(3); // 已返校
+            sl.setReturnTime(new Date()); // 更新为实际返校时间
+            if ("ROLE_ADMIN".equals(role)) {
+                sl.setAdminComment(comment);
+            } else if ("ROLE_TEACHER".equals(role)) {
+                sl.setTeacherComment(comment);
+            }
+        } else {
+            // 驳回销假申请，退回请假中状态
+            sl.setState(1); // 退回请假中
+            sl.setReturnTime(null); // 清空申请时间
+            if ("ROLE_ADMIN".equals(role)) {
+                sl.setAdminComment(comment);
+            } else if ("ROLE_TEACHER".equals(role)) {
+                sl.setTeacherComment(comment);
+            }
+        }
+        
+        studentLeaveRepository.save(sl);
+        
+        String msg = (state == 1) ? "销假审批通过" : "销假申请已驳回";
+        return CommonMethod.getReturnMessageOK(msg);
+    }
+    
+    /**
+     * 同步请假记录到考勤系统
+     */
+    public DataResponse syncLeaveWithAttendance(DataRequest dataRequest) {
+        Integer studentLeaveId = dataRequest.getInteger("studentLeaveId");
+        if(studentLeaveId == null || studentLeaveId <= 0) {
+            throw new BusinessException(ErrorCodes.LEAVE_DATA_INCOMPLETE, "请假ID不能为空");
+        }
+        
+        StudentLeave sl = studentLeaveRepository.findById(studentLeaveId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.LEAVE_RECORD_NOT_FOUND, "请假记录不存在"));
         
         try {
             // 解析请假日期范围

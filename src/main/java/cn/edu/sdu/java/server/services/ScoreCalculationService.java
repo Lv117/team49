@@ -2,17 +2,17 @@ package cn.edu.sdu.java.server.services;
 
 import cn.edu.sdu.java.server.models.Attendance;
 import cn.edu.sdu.java.server.models.Course;
+import cn.edu.sdu.java.server.models.DailyActivity;
 import cn.edu.sdu.java.server.models.Honor;
-import cn.edu.sdu.java.server.models.InnovationProject;
 import cn.edu.sdu.java.server.models.Score;
 import cn.edu.sdu.java.server.models.StudentDevelopment;
 import cn.edu.sdu.java.server.payload.request.DataRequest;
 import cn.edu.sdu.java.server.payload.response.DataResponse;
 import cn.edu.sdu.java.server.repositorys.AttendanceRepository;
 import cn.edu.sdu.java.server.repositorys.CourseRepository;
+import cn.edu.sdu.java.server.repositorys.DailyActivityRepository;
 import cn.edu.sdu.java.server.repositorys.DevelopmentRepository;
 import cn.edu.sdu.java.server.repositorys.HonorRepository;
-import cn.edu.sdu.java.server.repositorys.InnovationProjectRepository;
 import cn.edu.sdu.java.server.repositorys.ScoreRepository;
 import cn.edu.sdu.java.server.util.CommonMethod;
 import org.slf4j.Logger;
@@ -34,65 +34,65 @@ public class ScoreCalculationService {
     private final CourseRepository courseRepository;
     private final StudentService studentService;
     private final AttendanceRepository attendanceRepository;
+    private final DailyActivityRepository dailyActivityRepository;
     private final HonorRepository honorRepository;
-    private final InnovationProjectRepository innovationProjectRepository;
     private final DevelopmentRepository developmentRepository;
-    
-    public ScoreCalculationService(ScoreRepository scoreRepository, 
+
+    public ScoreCalculationService(ScoreRepository scoreRepository,
                                    CourseRepository courseRepository,
                                    StudentService studentService,
                                    AttendanceRepository attendanceRepository,
+                                   DailyActivityRepository dailyActivityRepository,
                                    HonorRepository honorRepository,
-                                   InnovationProjectRepository innovationProjectRepository,
                                    DevelopmentRepository developmentRepository) {
         this.scoreRepository = scoreRepository;
         this.courseRepository = courseRepository;
         this.studentService = studentService;
         this.attendanceRepository = attendanceRepository;
+        this.dailyActivityRepository = dailyActivityRepository;
         this.honorRepository = honorRepository;
-        this.innovationProjectRepository = innovationProjectRepository;
         this.developmentRepository = developmentRepository;
     }
     
     /**
      * 计算单个学生的综合绩分（4维加权计算）
-     * 成绩40%+考勤20%+实践20%+荣誉20%
+     * 成绩40%+考勤20%+创新20%+荣誉20%
      */
     public Map<String, Object> calculateStudentScore(Integer studentId, Map<String, Double> weights) {
         if (weights == null || weights.isEmpty()) {
             Map<String, Double> defaultWeights = new LinkedHashMap<>();
-            defaultWeights.put("成绩", 0.4);
-            defaultWeights.put("考勤", 0.2);
-            defaultWeights.put("实践", 0.2);
-            defaultWeights.put("荣誉", 0.2);
+            defaultWeights.put("成绩", 0.8);
+            defaultWeights.put("实践", 0.05);
+            defaultWeights.put("创新", 0.05);
+            defaultWeights.put("荣誉", 0.1);
             weights = defaultWeights;
         }
-        
+
         // 1. 计算课程成绩（按学分加权）
         double courseScore = calculateCourseScore(studentId);
-        
-        // 2. 计算考勤得分
-        double attendanceScore = calculateAttendanceScore(studentId);
-        
-        // 3. 计算实践得分（创新创业项目）
-        double practiceScore = calculatePracticeScore(studentId);
-        
+
+        // 2. 计算实践得分（社会实践板块）
+        double attendanceScore = calculatePracticeScore(studentId);
+
+        // 3. 计算创新得分（创新创业三类）
+        double practiceScore = calculateInnovationScore(studentId);
+
         // 4. 计算荣誉得分
         double honorScore = calculateHonorScore(studentId);
-        
+
         // 按权重计算综合绩分
-        double totalScore = courseScore * weights.getOrDefault("成绩", 0.4)
-                + attendanceScore * weights.getOrDefault("考勤", 0.2)
-                + practiceScore * weights.getOrDefault("实践", 0.2)
-                + honorScore * weights.getOrDefault("荣誉", 0.2);
-        
+        double totalScore = courseScore * weights.getOrDefault("成绩", 0.8)
+                + attendanceScore * weights.getOrDefault("实践", 0.05)
+                + practiceScore * weights.getOrDefault("创新", 0.05)
+                + honorScore * weights.getOrDefault("荣誉", 0.1);
+
         // 转为GPA（五分制）
         double gpa = convertToGPA(totalScore);
-        
+
         Map<String, Object> categoryScores = new LinkedHashMap<>();
         categoryScores.put("成绩", courseScore);
-        categoryScores.put("考勤", attendanceScore);
-        categoryScores.put("实践", practiceScore);
+        categoryScores.put("实践", attendanceScore);
+        categoryScores.put("创新", practiceScore);
         categoryScores.put("荣誉", honorScore);
         
         Map<String, Object> result = new LinkedHashMap<>();
@@ -136,38 +136,54 @@ public class ScoreCalculationService {
     }
     
     /**
-     * 计算考勤得分
-     * 根据出勤率换算：出勤率100%得100分，每减少1%扣1分
+     * 计算实践得分（社会实践四类：日常活动 daily_activity、培训讲座 training、校外实习 internship、志愿服务 volunteer）
+     * 每个已通过的记录得20分，最高100分
      */
-    private double calculateAttendanceScore(Integer studentId) {
-        List<Attendance> attendances = attendanceRepository.findByStudentPersonId(studentId);
+    private double calculatePracticeScore(Integer studentId) {
+        List<DailyActivity> activities = dailyActivityRepository.findByStudentId(studentId);
         
-        if (attendances.isEmpty()) {
-            return 0.0;
+        // 调试日志：输出查询到的所有活动
+        log.info("[calculatePracticeScore] studentId={}, 查询到 {} 条活动记录", studentId, activities.size());
+        for (DailyActivity a : activities) {
+            log.info("[calculatePracticeScore] activityId={}, activityType={}, status={}, activityName={}", 
+                    a.getId(), a.getActivityType(), a.getStatus(), a.getActivityName());
         }
-        
-        long attendanceCount = attendances.stream()
-                .filter(a -> "出勤".equals(a.getStatus()))
+
+        long approvedCount = activities.stream()
+                .filter(a -> "approved".equals(a.getStatus()))
+                .filter(a -> {
+                    String type = a.getActivityType();
+                    return "daily_activity".equals(type)
+                            || "training".equals(type)
+                            || "internship".equals(type)
+                            || "volunteer".equals(type);
+                })
                 .count();
         
-        double attendanceRate = (double) attendanceCount / attendances.size();
-        
-        // 出勤率转得分
-        return Math.round(attendanceRate * 100.0);
+        log.info("[calculatePracticeScore] studentId={}, approvedCount={}, score={}", studentId, approvedCount, Math.min(approvedCount * 20.0, 100.0));
+
+        // 每条记录20分，最高100分
+        return Math.min(approvedCount * 20.0, 100.0);
     }
     
     /**
-     * 计算实践得分（创新创业项目）
-     * 每个已批准的项目得20分，最高100分
+     * 计算创新得分（创新创业三类：创业实践 innovation、学科竞赛 competition、科研成果 achievement）
+     * 每个已通过的记录得20分，最高100分
      */
-    private double calculatePracticeScore(Integer studentId) {
-        List<InnovationProject> projects = innovationProjectRepository.findByStudentId(studentId);
-        
-        long approvedCount = projects.stream()
-                .filter(p -> "approved".equals(p.getStatus()))
+    private double calculateInnovationScore(Integer studentId) {
+        List<StudentDevelopment> developments = developmentRepository.findByStudentId(studentId);
+
+        long approvedCount = developments.stream()
+                .filter(d -> "approved".equals(d.getStatus()))
+                .filter(d -> {
+                    String type = d.getDevelopmentType();
+                    return "innovation".equals(type)
+                            || "competition".equals(type)
+                            || "achievement".equals(type);
+                })
                 .count();
-        
-        // 每个项目20分，最高100分
+
+        // 每条记录20分，最高100分
         return Math.min(approvedCount * 20.0, 100.0);
     }
     
@@ -197,6 +213,7 @@ public class ScoreCalculationService {
                         case "院级":
                             honorScore += 10;
                             break;
+                        // 其他级别（如村级等）不给分
                     }
                 }
             }
@@ -210,7 +227,9 @@ public class ScoreCalculationService {
      * 获取所有学生绩分排名
      */
     public DataResponse getScoreRanking() {
-        DataResponse studentListResponse = studentService.getStudentList(new DataRequest());
+        DataRequest req = new DataRequest();
+        req.add("numName", "");
+        DataResponse studentListResponse = studentService.getStudentList(req);
         List<Map<String, Object>> studentList = (List<Map<String, Object>>) studentListResponse.getData();
         
         if (studentList == null || studentList.isEmpty()) {
@@ -231,6 +250,7 @@ public class ScoreCalculationService {
                 rankingItem.put("studentId", studentId);
                 rankingItem.put("studentName", studentName);
                 rankingItem.put("studentNum", studentNum);
+                rankingItem.put("className", CommonMethod.getString(student, "className"));
                 rankingItem.put("totalScore", totalScore);
                 rankingItem.put("categoryScores", scoreResult.get("categoryScores"));
                 
@@ -252,14 +272,14 @@ public class ScoreCalculationService {
      */
     public DataResponse getDefaultWeights() {
         Map<String, Double> weights = new LinkedHashMap<>();
-        weights.put("成绩", 0.4);
-        weights.put("考勤", 0.2);
-        weights.put("实践", 0.2);
-        weights.put("荣誉", 0.2);
-        
+        weights.put("成绩", 0.8);
+        weights.put("实践", 0.05);
+        weights.put("创新", 0.05);
+        weights.put("荣誉", 0.1);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("weights", weights);
-        result.put("description", "默认权重配置：成绩40%，考勤20%，实践20%，荣誉20%");
+        result.put("description", "默认权重配置：成绩80%，实践5%，创新5%，荣誉10%");
         
         return CommonMethod.getReturnData(result);
     }

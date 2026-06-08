@@ -319,6 +319,7 @@ CREATE TABLE IF NOT EXISTS family_member (
     gender VARCHAR(10) COMMENT '性别',
     age INT COMMENT '年龄',
     unit VARCHAR(50) COMMENT '工作单位',
+    phone VARCHAR(30) COMMENT '联系方式',
     INDEX idx_person_id (person_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='家庭成员表';
 

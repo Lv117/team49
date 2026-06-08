@@ -27,5 +27,6 @@ public class FamilyMember {
     private Integer age;
     @Size(max=50)
     private String unit;
-
+    @Size(max=30)
+    private String phone;
 }

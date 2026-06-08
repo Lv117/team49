@@ -55,10 +55,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
     @Override
     public List<OptionItem> getYearSemesterOptionList() {
         List<OptionItem> yearSemesterList = new ArrayList<>();
-        yearSemesterList.add(new OptionItem(1, "1", "2023-2024学年第一学期"));
-        yearSemesterList.add(new OptionItem(2, "2", "2023-2024学年第二学期"));
-        yearSemesterList.add(new OptionItem(3, "3", "2024-2025学年第一学期"));
-        yearSemesterList.add(new OptionItem(4, "4", "2024-2025学年第二学期"));
+        yearSemesterList.add(new OptionItem(6, "6", "2025-2026学年第二学期"));
         return yearSemesterList;
     }
 
@@ -114,7 +111,7 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
     }
 
     @Override
-    public List<Map<String, Object>> getStudentExamScheduleList(String studentId, Integer yearSemesterId) {
+    public List<Map<String, Object>> getStudentExamScheduleList(String studentId, Integer yearSemesterId, String courseName) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (studentId == null || studentId.isEmpty()) {
             return result;
@@ -149,8 +146,10 @@ public class ExamScheduleServiceImpl implements ExamScheduleService {
             return result;
         }
 
+        // 如果有课程名称筛选条件，只查询该课程
+        String queryCourseName = courseName != null && !courseName.isEmpty() ? courseName : "";
         Integer queryYearSemesterId = yearSemesterId == null ? 0 : yearSemesterId;
-        List<ExamSchedule> examSchedules = examScheduleRepository.findByYearSemesterIdAndCourseNameContaining(queryYearSemesterId, "");
+        List<ExamSchedule> examSchedules = examScheduleRepository.findByYearSemesterIdAndCourseNameContaining(queryYearSemesterId, queryCourseName);
         for (ExamSchedule examSchedule : examSchedules) {
             Integer examCourseId = examSchedule.getCourseId();
             String examCourseName = examSchedule.getCourseName();

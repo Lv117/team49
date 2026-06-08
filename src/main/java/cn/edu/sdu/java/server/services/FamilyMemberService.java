@@ -118,7 +118,8 @@ public class FamilyMemberService {
         member.setGender(CommonMethod.getString(form, "gender"));
         member.setAge(CommonMethod.getInteger(form, "age"));
         member.setUnit(CommonMethod.getString(form, "unit"));
-        
+        member.setPhone(CommonMethod.getString(form, "phone"));
+
         familyMemberRepository.save(member);
         return CommonMethod.getReturnMessageOK();
     }
@@ -156,6 +157,7 @@ public class FamilyMemberService {
         map.put("gender", member.getGender());
         map.put("age", member.getAge());
         map.put("unit", member.getUnit());
+        map.put("phone", member.getPhone());
         return map;
     }
 }

@@ -45,7 +45,7 @@ public class InnovationController {
      */
     @Operation(summary = "保存创新实践项目")
     @PostMapping("/innovationProjectSave")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse innovationProjectSave(@Valid @RequestBody DataRequest dataRequest) {
         return innovationProjectService.innovationProjectSave(dataRequest);
     }
@@ -55,7 +55,7 @@ public class InnovationController {
      */
     @Operation(summary = "删除创新实践项目")
     @PostMapping("/innovationProjectDelete")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('STUDENT')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('TEACHER') or hasRole('STUDENT')")
     public DataResponse innovationProjectDelete(@Valid @RequestBody DataRequest dataRequest) {
         return innovationProjectService.innovationProjectDelete(dataRequest);
     }

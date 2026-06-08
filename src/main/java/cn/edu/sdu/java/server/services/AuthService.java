@@ -80,8 +80,10 @@ public class AuthService {
                 throw new BusinessException(ErrorCodes.AUTH_ROLE_INVALID, "登录失败：用户角色无效，不允许登录");
             }
             
-            // 切换账号和登录以认证成功为准，这里不再同步写 user 表，
-            // 避免登录统计更新被锁等待拖住整次登录流程。
+            // 更新登录统计信息
+            user.setLastLoginTime(DateTimeTool.parseDateTime(new Date()));
+            user.setLoginCount(user.getLoginCount() == null ? 1 : user.getLoginCount() + 1);
+            userRepository.save(user);
         }
         
         String jwt = jwtService.generateToken(userDetails);
@@ -97,69 +99,7 @@ public class AuthService {
         return CommonMethod.getReturnData(LoginControlUtil.getInstance().getValidateCodeDataMap());
     }
 
-    public DataResponse testValidateInfo( DataRequest dataRequest) {
-        Integer validateCodeId = dataRequest.getInteger("validateCodeId");
-        String validateCode = dataRequest.getString("validateCode");
-        LoginControlUtil li =  LoginControlUtil.getInstance();
-        if(validateCodeId == null || validateCode== null || validateCode.isEmpty()) {
-            throw new BusinessException(ErrorCodes.AUTH_CAPTCHA_INVALID, "验证码为空");
-        }
-        String value = li.getValidateCode(validateCodeId);
-        if(!validateCode.equals(value))
-            throw new BusinessException(ErrorCodes.AUTH_CAPTCHA_INVALID, "验证码错误");
-        return CommonMethod.getReturnMessageOK();
-    }
-    /*
-     *  注册用户示例，我们项目暂时不用， 所有用户通过管理员添加，这里注册，没有考虑关联人员信息的创建，使用时参加学生添加功能的实现
-     */
-    @PostMapping("/registerUser")
-    public DataResponse registerUser(@Valid @RequestBody DataRequest dataRequest) {
-        String username = dataRequest.getString("username");
-        String password = dataRequest.getString("password");
-        String perName = dataRequest.getString("perName");
-        String email = dataRequest.getString("email");
-        String role = dataRequest.getString("role");
-        UserType ut = null;
-        Optional<User> uOp = userRepository.findByUserName(username);
-        if(uOp.isPresent()) {
-            throw new BusinessException(ErrorCodes.REGISTER_USERNAME_CONFLICT, "用户已经存在，不能注册");
-        }
-        Person p = new Person();
-        p.setNum(username);
-        p.setName(perName);
-        p.setEmail(email);
-        if("ADMIN".equals(role)) {
-            p.setType("0");
-            ut = userTypeRepository.findByName(EUserType.ROLE_ADMIN.name());
-        }else if("STUDENT".equals(role)) {
-            p.setType("1");
-            ut = userTypeRepository.findByName(EUserType.ROLE_STUDENT.name());
-        }else if("TEACHER".equals(role)) {
-            p.setType("2");
-            ut = userTypeRepository.findByName(EUserType.ROLE_TEACHER.name());
-        }
-        personRepository.saveAndFlush(p);
-        User u = new User();
-        u.setPerson(p);
-        u.setUserType(ut);
-        u.setUserName(username);
-        u.setPassword(encoder.encode(password));
-        u.setCreateTime(DateTimeTool.parseDateTime(new Date()));
-        u.setCreatorId(p.getPersonId());
-        u.setLoginCount(0);
-        userRepository.saveAndFlush(u);
-        if("STUDENT".equals(role)) {
-            Student s = new Student();   // 创建实体对象
-            s.setPerson(p);
-            s.setPersonId(p.getPersonId());
-            studentRepository.saveAndFlush(s);  //插入新的Student记录
-        } else if("TEACHER".equals(role)) {
-            Teacher t = new Teacher();
-            t.setPerson(p);
-            t.setPersonId(p.getPersonId());
-            teacherRepository.saveAndFlush(t);
-        }
-        return CommonMethod.getReturnData(LoginControlUtil.getInstance().getValidateCodeDataMap());
-    }
+
+
 
 }

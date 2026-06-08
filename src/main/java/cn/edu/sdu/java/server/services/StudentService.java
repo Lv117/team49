@@ -51,8 +51,16 @@ public class StudentService {
     private final DevelopmentRepository developmentRepository;
     private final AttendanceRepository attendanceRepository;
     private final TeacherDataScopeService teacherDataScopeService;
+    private final CourseSelectionRepository courseSelectionRepository;
+    private final HomeworkSubmissionRepository homeworkSubmissionRepository;
+    private final PunishmentRepository punishmentRepository;
+    private final DailyActivityRepository dailyActivityRepository;
+    private final InnovationProjectRepository innovationProjectRepository;
+    private final HonorRepository honorRepository;
+    private final StudentExamScheduleRepository studentExamScheduleRepository;
+    private final StudentLeaveRepository studentLeaveRepository;
 
-    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SocialRelationRepository socialRelationRepository, SystemService systemService, ScoreRepository scoreRepository, DevelopmentRepository developmentRepository, AttendanceRepository attendanceRepository, TeacherDataScopeService teacherDataScopeService) {
+    public StudentService(PersonRepository personRepository, StudentRepository studentRepository, UserRepository userRepository, UserTypeRepository userTypeRepository, PasswordEncoder encoder, FeeRepository feeRepository, FamilyMemberRepository familyMemberRepository, SocialRelationRepository socialRelationRepository, SystemService systemService, ScoreRepository scoreRepository, DevelopmentRepository developmentRepository, AttendanceRepository attendanceRepository, TeacherDataScopeService teacherDataScopeService, CourseSelectionRepository courseSelectionRepository, HomeworkSubmissionRepository homeworkSubmissionRepository, PunishmentRepository punishmentRepository, DailyActivityRepository dailyActivityRepository, InnovationProjectRepository innovationProjectRepository, HonorRepository honorRepository, StudentExamScheduleRepository studentExamScheduleRepository, StudentLeaveRepository studentLeaveRepository) {
         this.personRepository = personRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -66,6 +74,14 @@ public class StudentService {
         this.developmentRepository = developmentRepository;
         this.attendanceRepository = attendanceRepository;
         this.teacherDataScopeService = teacherDataScopeService;
+        this.courseSelectionRepository = courseSelectionRepository;
+        this.homeworkSubmissionRepository = homeworkSubmissionRepository;
+        this.punishmentRepository = punishmentRepository;
+        this.dailyActivityRepository = dailyActivityRepository;
+        this.innovationProjectRepository = innovationProjectRepository;
+        this.honorRepository = honorRepository;
+        this.studentExamScheduleRepository = studentExamScheduleRepository;
+        this.studentLeaveRepository = studentLeaveRepository;
     }
 
     public Map<String,Object> getMapFromStudent(Student s) {
@@ -112,6 +128,13 @@ public class StudentService {
     public DataResponse getStudentList(DataRequest dataRequest) {
         String numName = dataRequest.getString("numName");
         List<Map<String,Object>> dataList = getStudentMapList(numName);
+        // 教师角色只返回授课范围内的学生
+        if (teacherDataScopeService.isCurrentRoleTeacher()) {
+            Set<Integer> allowedIds = teacherDataScopeService.getCurrentTeacherStudentIds();
+            dataList = dataList.stream()
+                    .filter(m -> allowedIds.contains(CommonMethod.getInteger(m, "personId")))
+                    .toList();
+        }
         return CommonMethod.getReturnData(dataList);  //按照测试框架规范会送Map的list
     }
 
@@ -129,6 +152,92 @@ public class StudentService {
         if (p == null) {
             throw new BusinessException(ErrorCodes.STUDENT_DATA_INCOMPLETE, "人员信息不存在");
         }
+        
+        // 先删除所有关联表数据（按外键依赖顺序）
+        // 1. 删除消费记录
+        List<Fee> feeList = feeRepository.findListByStudent(personId);
+        if (feeList != null && !feeList.isEmpty()) {
+            feeRepository.deleteAll(feeList);
+        }
+        
+        // 2. 删除成绩记录
+        List<Score> scoreList = scoreRepository.findByStudentPersonId(personId);
+        if (scoreList != null && !scoreList.isEmpty()) {
+            scoreRepository.deleteAll(scoreList);
+        }
+        
+        // 3. 删除家庭成员
+        List<FamilyMember> familyList = familyMemberRepository.findByStudentPersonId(personId);
+        if (familyList != null && !familyList.isEmpty()) {
+            familyMemberRepository.deleteAll(familyList);
+        }
+        
+        // 4. 删除社会关系
+        List<SocialRelation> socialList = socialRelationRepository.findByStudentPersonId(personId);
+        if (socialList != null && !socialList.isEmpty()) {
+            socialRelationRepository.deleteAll(socialList);
+        }
+        
+        // 5. 删除考勤记录
+        List<Attendance> attendanceList = attendanceRepository.findByStudentPersonId(personId);
+        if (attendanceList != null && !attendanceList.isEmpty()) {
+            attendanceRepository.deleteAll(attendanceList);
+        }
+        
+        // 6. 删除发展记录
+        List<StudentDevelopment> developmentList = developmentRepository.findByStudentId(personId);
+        if (developmentList != null && !developmentList.isEmpty()) {
+            developmentRepository.deleteAll(developmentList);
+        }
+        
+        // 7. 删除选课记录
+        List<CourseSelection> courseSelectionList = courseSelectionRepository.findByStudentPersonId(personId);
+        if (courseSelectionList != null && !courseSelectionList.isEmpty()) {
+            courseSelectionRepository.deleteAll(courseSelectionList);
+        }
+        
+        // 8. 删除作业提交记录
+        List<HomeworkSubmission> homeworkSubmissionList = homeworkSubmissionRepository.findByStudentPersonId(personId);
+        if (homeworkSubmissionList != null && !homeworkSubmissionList.isEmpty()) {
+            homeworkSubmissionRepository.deleteAll(homeworkSubmissionList);
+        }
+        
+        // 9. 删除处分记录
+        List<Punishment> punishmentList = punishmentRepository.findByStudentId(personId);
+        if (punishmentList != null && !punishmentList.isEmpty()) {
+            punishmentRepository.deleteAll(punishmentList);
+        }
+        
+        // 10. 删除日常活动记录
+        List<DailyActivity> dailyActivityList = dailyActivityRepository.findByStudentId(personId);
+        if (dailyActivityList != null && !dailyActivityList.isEmpty()) {
+            dailyActivityRepository.deleteAll(dailyActivityList);
+        }
+        
+        // 11. 删除创新项目记录
+        List<InnovationProject> innovationProjectList = innovationProjectRepository.findByStudentId(personId);
+        if (innovationProjectList != null && !innovationProjectList.isEmpty()) {
+            innovationProjectRepository.deleteAll(innovationProjectList);
+        }
+        
+        // 12. 删除荣誉记录
+        List<Honor> honorList = honorRepository.findByStudentId(personId);
+        if (honorList != null && !honorList.isEmpty()) {
+            honorRepository.deleteAll(honorList);
+        }
+        
+        // 13. 删除考试安排记录
+        List<StudentExamSchedule> examScheduleList = studentExamScheduleRepository.findByStudentId(String.valueOf(personId));
+        if (examScheduleList != null && !examScheduleList.isEmpty()) {
+            studentExamScheduleRepository.deleteAll(examScheduleList);
+        }
+        
+        // 14. 删除请假记录（使用getStudentLeaveList方法，传入null表示不限制状态）
+        List<StudentLeave> studentLeaveList = studentLeaveRepository.getStudentLeaveList(null, "", "", "", personId);
+        if (studentLeaveList != null && !studentLeaveList.isEmpty()) {
+            studentLeaveRepository.deleteAll(studentLeaveList);
+        }
+        
         // 删除顺序：先删 student → 再删 user → 最后删 person
         studentRepository.delete(s);
         userRepository.findById(personId).ifPresent(userRepository::delete);
@@ -139,6 +248,10 @@ public class StudentService {
 
     public DataResponse getStudentInfo(DataRequest dataRequest) {
         Integer personId = dataRequest.getInteger("personId");
+        // 教师只能查询本人授课学生的信息
+        if (personId != null && teacherDataScopeService.isCurrentRoleTeacher()) {
+            teacherDataScopeService.assertCurrentTeacherAccessStudent(personId, "您仅可查看本人授课学生的信息");
+        }
         Student s = null;
         Optional<Student> op;
         if (personId != null) {
@@ -203,6 +316,25 @@ public class StudentService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 验证邮箱格式是否合法
+     * @param email 邮箱地址
+     * @return 如果邮箱为空或格式正确返回 null，否则返回错误信息
+     */
+    private String validateEmail(String email) {
+        if (email == null || email.isEmpty()) {
+            return null; // 邮箱为空不验证
+        }
+        // 邮箱格式正则：本地部分@域名部分
+        // 本地部分：允许字母、数字、下划线、点、横线
+        // 域名部分：允许字母、数字、横线，必须包含点，顶级域名至少2个字符
+        String emailRegex = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$";
+        if (!email.matches(emailRegex)) {
+            return "邮箱格式不正确，请输入有效的邮箱地址（如：example@domain.com）";
+        }
+        return null;
     }
 
     private void populatePerson(Person p, Map<String, Object> form, String num) {
@@ -301,6 +433,12 @@ public class StudentService {
         }
         if (num == null) {
             return CommonMethod.getReturnMessageError("学号不能为空", ErrorCodes.STUDENT_NUM_REQUIRED);
+        }
+        // 验证邮箱格式
+        String email = normalizeText(CommonMethod.getString(form, "email"));
+        String emailError = validateEmail(email);
+        if (emailError != null) {
+            return CommonMethod.getReturnMessageError(emailError, ErrorCodes.STUDENT_EMAIL_INVALID);
         }
         Optional<Person> nOp = personRepository.findByNum(num); //查询是否存在num的人员
         Person existingPersonByNum = nOp.orElse(null);
@@ -457,7 +595,12 @@ public class StudentService {
 
 
 
-    public String importFeeData(Integer personId, InputStream in){
+    public Map<String, Object> importFeeData(Integer personId, InputStream in){
+        Map<String, Object> result = new HashMap<>();
+        int successCount = 0;
+        int failCount = 0;
+        List<String> failReasons = new ArrayList<>();
+        
         try {
             Student student = studentRepository.findById(personId).get();
             XSSFWorkbook workbook = new XSSFWorkbook(in);  //打开Excl数据流
@@ -465,54 +608,119 @@ public class StudentService {
             Iterator<Row> rowIterator = sheet.iterator();
             Row row;
             Cell cell;
-            int i;
-            i = 1;
-            String day, money;
+            int rowNum = 1;
+            String day, consumptionType, moneyStr, description;
             Optional<Fee> fOp;
             double dMoney;
             Fee f;
-            rowIterator.next();
+            rowIterator.next();  // 跳过标题行
             while (rowIterator.hasNext()) {
                 row = rowIterator.next();
                 cell = row.getCell(0);
                 if (cell == null)
                     break;
-                day = cell.getStringCellValue();  //获取一行消费记录 日期 金额
+                // 读取导出文件的格式：日期(0)、类型(1)、金额(2)、备注(3)、创建时间(4)
+                day = getCellStringValue(cell);  // 第0列：消费日期
                 cell = row.getCell(1);
-                money = cell.getStringCellValue();
-                fOp = feeRepository.findByStudentPersonIdAndDay(personId, day);  //查询是否存在记录
-                if (fOp.isEmpty()) {
-                    f = new Fee();
-                    f.setDay(day);
-                    f.setStudent(student);  //不存在 添加
-                } else {
-                    f = fOp.get();  //存在 更新
+                consumptionType = cell != null ? getCellStringValue(cell) : "other";  // 第1列：消费类型
+                cell = row.getCell(2);
+                moneyStr = cell != null ? getCellStringValue(cell) : "0";  // 第2列：消费金额
+                cell = row.getCell(3);
+                description = cell != null ? getCellStringValue(cell) : "";  // 第3列：备注
+                
+                try {
+                    // 转换消费类型
+                    String typeCode = parseConsumptionType(consumptionType);
+                    
+                    fOp = feeRepository.findByStudentPersonIdAndDay(personId, day);  //查询是否存在记录
+                    if (fOp.isEmpty()) {
+                        f = new Fee();
+                        f.setDay(day);
+                        f.setStudent(student);  //不存在 添加
+                    } else {
+                        f = fOp.get();  //存在 更新
+                    }
+                    dMoney = Double.parseDouble(moneyStr);
+                    f.setMoney(dMoney);
+                    f.setConsumptionType(typeCode);
+                    f.setDescription(description);
+                    feeRepository.save(f);
+                    successCount++;
+                } catch (Exception e) {
+                    failCount++;
+                    failReasons.add("第" + (rowNum + 1) + "行导入失败: " + e.getMessage());
+                    log.error("导入第{}行数据失败: {}", rowNum + 1, e.getMessage());
                 }
-                if (money != null && !money.isEmpty())
-                    dMoney = Double.parseDouble(money);
-                else
-                    dMoney = 0d;
-                f.setMoney(dMoney);
-                feeRepository.save(f);
+                rowNum++;
             }
             workbook.close();  //关闭Excl输入流
-            return null;
         } catch (Exception e) {
             log.error(e.getMessage());
-            return "上传错误！";
+            failReasons.add("上传错误: " + e.getMessage());
         }
-
+        
+        result.put("successCount", successCount);
+        result.put("failCount", failCount);
+        result.put("failReasons", failReasons);
+        return result;
+    }
+    
+    /**
+     * 获取单元格值为字符串
+     */
+    private String getCellStringValue(Cell cell) {
+        if (cell == null) {
+            return "";
+        }
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                    return new java.text.SimpleDateFormat("yyyy-MM-dd").format(cell.getDateCellValue());
+                }
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val) && !Double.isInfinite(val)) {
+                    return String.valueOf((long) val);
+                }
+                return String.valueOf(val);
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                try {
+                    return cell.getStringCellValue();
+                } catch (Exception e) {
+                    return cell.getCellFormula();
+                }
+            default:
+                return "";
+        }
+    }
+    
+    /**
+     * 解析消费类型名称为类型代码
+     */
+    private String parseConsumptionType(String typeName) {
+        if (typeName == null || typeName.trim().isEmpty()) {
+            return "other";
+        }
+        String name = typeName.trim();
+        return switch (name) {
+            case "餐饮", "餐饮消费", "dining" -> "dining";
+            case "学习用品", "study" -> "study";
+            case "交通", "交通费", "transport" -> "transport";
+            case "生活用品", "life" -> "life";
+            case "娱乐", "娱乐消费", "entertainment" -> "entertainment";
+            default -> "other";
+        };
     }
 
     public DataResponse importFeeData(@RequestBody byte[] barr,
                                       String personIdStr
                                       ) {
         Integer personId =  Integer.parseInt(personIdStr);
-        String msg = importFeeData(personId,new ByteArrayInputStream(barr));
-        if(msg == null)
-            return CommonMethod.getReturnMessageOK();
-        else
-            return CommonMethod.getReturnMessageError(msg);
+        Map<String, Object> result = importFeeData(personId, new ByteArrayInputStream(barr));
+        return CommonMethod.getReturnData(result);
     }
 
     public ResponseEntity<StreamingResponseBody> getStudentListExcl( DataRequest dataRequest) {
@@ -622,6 +830,7 @@ public class StudentService {
                 m.put("gender", f.getGender());
                 m.put("age", f.getAge()+"");
                 m.put("unit", f.getUnit());
+                m.put("phone", f.getPhone());
                 dataList.add(m);
             }
         }
@@ -663,6 +872,7 @@ public class StudentService {
         f.setGender(CommonMethod.getString(form,"gender"));
         f.setAge(CommonMethod.getInteger(form,"age"));
         f.setUnit(CommonMethod.getString(form,"unit"));
+        f.setPhone(CommonMethod.getString(form,"phone"));
         familyMemberRepository.save(f);
         return CommonMethod.getReturnMessageOK();
     }
@@ -787,15 +997,18 @@ public class StudentService {
     public DataResponse importFeeDataWeb(Map<String,Object> request,MultipartFile file) {
         Integer personId = CommonMethod.getInteger(request, "personId");
         try {
-            String msg= importFeeData(personId,file.getInputStream());
-            if(msg == null)
-                return CommonMethod.getReturnMessageOK();
-            else
-                return CommonMethod.getReturnMessageError(msg);
+            Map<String, Object> result = importFeeData(personId, file.getInputStream());
+            return CommonMethod.getReturnData(result);
         } catch (Exception e) {
             log.error(e.getMessage());
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("successCount", 0);
+            errorResult.put("failCount", 0);
+            List<String> failReasons = new ArrayList<>();
+            failReasons.add("上传错误: " + e.getMessage());
+            errorResult.put("failReasons", failReasons);
+            return CommonMethod.getReturnData(errorResult);
         }
-        return CommonMethod.getReturnMessageError("上传错误！");
     }
 
     public DataResponse getStudentIntroduceData(DataRequest dataRequest) {
@@ -864,34 +1077,8 @@ public class StudentService {
         }
         portrait.put("scoreRadar", scoreRadar);
         
-        // 3. 考勤统计
-        List<Attendance> attendanceList = attendanceRepository.findByStudentPersonId(studentId);
-        Map<String, Object> attendanceStats = new HashMap<>();
-        int total = attendanceList != null ? attendanceList.size() : 0;
-        int present = 0, absent = 0, late = 0, earlyLeave = 0;
-        
-        if (attendanceList != null) {
-            for (Attendance attendance : attendanceList) {
-                String status = attendance.getStatus();
-                if ("出勤".equals(status)) {
-                    present++;
-                } else if ("缺勤".equals(status)) {
-                    absent++;
-                } else if ("迟到".equals(status)) {
-                    late++;
-                } else if ("早退".equals(status)) {
-                    earlyLeave++;
-                }
-            }
-        }
-        
-        attendanceStats.put("total", total);
-        attendanceStats.put("present", present);
-        attendanceStats.put("absent", absent);
-        attendanceStats.put("late", late);
-        attendanceStats.put("earlyLeave", earlyLeave);
-        attendanceStats.put("attendanceRate", total > 0 ? String.format("%.2f%%", (double) present / total * 100) : "0%");
-        portrait.put("attendanceStats", attendanceStats);
+        // 3. 考勤统计（已废弃，考勤功能未实现，返回空数据）
+        portrait.put("attendanceStats", new HashMap<>());
         
         // 4. 实践荣誉统计(按类型统计)
         List<StudentDevelopment> developmentList = developmentRepository.findByStudentId(studentId);
@@ -924,7 +1111,94 @@ public class StudentService {
         developmentStats.put("competitionCount", competitionCount);
         developmentStats.put("achievementCount", achievementCount);
         developmentStats.put("approvedCount", approvedCount);
+        
+        // 计算荣誉得分（按级别加分，上限100）- 从honor表查询，与绩分计算面板一致
+        double honorScore = 0.0;
+        List<Honor> honorList = honorRepository.findByStudentId(studentId);
+        if (honorList != null) {
+            for (Honor honor : honorList) {
+                if ("approved".equals(honor.getStatus())) {
+                    String level = honor.getHonorLevel();
+                    if (level != null) {
+                        switch (level) {
+                            case "国家级": honorScore += 50; break;
+                            case "省级": honorScore += 30; break;
+                            case "校级": honorScore += 20; break;
+                            case "院级": honorScore += 10; break;
+                        }
+                    }
+                }
+            }
+        }
+        honorScore = Math.min(honorScore, 100.0);
+        developmentStats.put("honorScore", honorScore);
+        
         portrait.put("developmentStats", developmentStats);
+        
+        // 5. 添加计算好的四维分数和权重（与绩分计算面板一致）
+        // 成绩分数（按学分加权平均）
+        double courseScore = 0.0;
+        if (scoreList != null && !scoreList.isEmpty()) {
+            double totalScore = 0.0;
+            double totalCredit = 0.0;
+            for (Score score : scoreList) {
+                if (score.getMark() != null && score.getCourse() != null && score.getCourse().getCredit() != null) {
+                    totalScore += score.getMark().doubleValue() * score.getCourse().getCredit();
+                    totalCredit += score.getCourse().getCredit();
+                }
+            }
+            if (totalCredit > 0) {
+                courseScore = totalScore / totalCredit;
+            }
+        }
+        
+        // 实践分数（从社会实践板块计算：日常活动/培训讲座/校外实习/志愿服务）
+        List<DailyActivity> activityList = dailyActivityRepository.findByStudentId(studentId);
+        long practiceApprovedCount = 0;
+        if (activityList != null) {
+            practiceApprovedCount = activityList.stream()
+                    .filter(a -> "approved".equals(a.getStatus()))
+                    .filter(a -> {
+                        String type = a.getActivityType();
+                        return "daily_activity".equals(type)
+                                || "training".equals(type)
+                                || "internship".equals(type)
+                                || "volunteer".equals(type);
+                    })
+                    .count();
+        }
+        double practiceScore = Math.min(practiceApprovedCount * 20.0, 100.0);
+        
+        // 创新分数（从创新创业板块计算：创业实践/学科竞赛/科研成果）
+        double innovationScore = 0.0;
+        if (developmentList != null) {
+            long innovationApprovedCount = developmentList.stream()
+                    .filter(d -> "approved".equals(d.getStatus()))
+                    .filter(d -> {
+                        String type = d.getDevelopmentType();
+                        return "innovation".equals(type)
+                                || "competition".equals(type)
+                                || "achievement".equals(type);
+                    })
+                    .count();
+            innovationScore = Math.min(innovationApprovedCount * 20.0, 100.0);
+        }
+        
+        // 默认权重配置（成绩80%、实践5%、创新5%、荣誉10%）
+        Map<String, Object> weights = new HashMap<>();
+        weights.put("scoreWeight", 0.8);
+        weights.put("attendanceWeight", 0.05);  // attendanceWeight现在存储实践权重
+        weights.put("practiceWeight", 0.05);    // practiceWeight现在存储创新权重
+        weights.put("honorWeight", 0.1);
+        
+        Map<String, Object> calculatedScores = new HashMap<>();
+        calculatedScores.put("scoreValue", Math.round(courseScore * 100.0) / 100.0);
+        calculatedScores.put("attendanceValue", Math.round(practiceScore * 100.0) / 100.0);  // attendanceValue存储实践分数
+        calculatedScores.put("practiceValue", Math.round(innovationScore * 100.0) / 100.0);  // practiceValue存储创新分数
+        calculatedScores.put("honorValue", Math.round(honorScore * 100.0) / 100.0);
+        calculatedScores.put("weights", weights);
+        
+        portrait.put("calculatedScores", calculatedScores);
         
         // 5. 消费趋势(最近6个月)
         List<Fee> feeList = feeRepository.findListByStudent(studentId);

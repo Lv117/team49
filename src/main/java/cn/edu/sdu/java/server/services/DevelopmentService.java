@@ -271,6 +271,8 @@ public class DevelopmentService {
         String status = dataRequest.getString("status");
         String approvalOpinion = dataRequest.getString("approvalOpinion");
 
+        System.out.println("[DEBUG] developmentApprove - id: " + id + ", status: " + status + ", approvalOpinion: " + approvalOpinion);
+
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCodes.DEVELOPMENT_NOT_FOUND, "发展记录ID不能为空");
         }
@@ -285,6 +287,7 @@ public class DevelopmentService {
             throw new BusinessException(ErrorCodes.ACCESS_DENIED, "仅可审批本人授课学生提交的数据");
         }
         String currentStatus = development.getStatus();
+        System.out.println("[DEBUG] developmentApprove - currentStatus: " + currentStatus + ", newStatus: " + status);
 
         // 统一发展记录虽然聚合了多种成果，但审批仍要遵循同一套状态机规则。
         if (!ApprovalStateMachine.isValidTransition(currentStatus, status)) {
@@ -299,6 +302,7 @@ public class DevelopmentService {
         development.setApproveTime(LocalDateTime.now());
         development.setUpdateTime(LocalDateTime.now());
         developmentRepository.save(development);
+        System.out.println("[DEBUG] developmentApprove - saved status: " + development.getStatus());
 
         ApprovalRecord record = new ApprovalRecord();
         record.setBusinessType("development_" + development.getDevelopmentType());
@@ -389,11 +393,9 @@ public class DevelopmentService {
                 break;
 
             case "achievement":
-                // 成果: patentType, status
+                // 成果: patentType（注意：不再保存 achievementStatus 到 extra_info，避免与主 status 冲突）
                 String patentType = CommonMethod.getString(form, "patentType");
-                String achievementStatus = CommonMethod.getString(form, "achievementStatus");
                 if (patentType != null) extraInfo.put("patentType", patentType);
-                if (achievementStatus != null) extraInfo.put("status", achievementStatus);
                 break;
         }
 
@@ -411,7 +413,14 @@ public class DevelopmentService {
         map.put("title", development.getTitle());
         map.put("description", development.getDescription());
         map.put("developmentType", development.getDevelopmentType());
-        map.put("status", development.getStatus());
+        // 处理 status 为 null 的情况（兼容旧数据）
+        String status = development.getStatus();
+        System.out.println("[DEBUG] getMapFromDevelopment - id: " + development.getId() + ", DB status: [" + status + "], extraInfo: " + development.getExtraInfo());
+        if (status == null || status.isEmpty()) {
+            status = "draft";
+        }
+        map.put("status", status);  // 先设置主状态
+        System.out.println("[DEBUG] getMapFromDevelopment - final status for id " + development.getId() + ": [" + status + "]");
         map.put("approvalOpinion", development.getApprovalOpinion());
         map.put("approverId", development.getApproverId());
         map.put("approveTime", development.getApproveTime());
@@ -421,9 +430,26 @@ public class DevelopmentService {
         map.put("createTime", development.getCreateTime());
         map.put("updateTime", development.getUpdateTime());
 
+        // 查询学号（studentNum）
+        if (development.getStudentId() != null) {
+            Optional<Student> studentOpt = studentRepository.findByPersonPersonId(development.getStudentId());
+            if (studentOpt.isPresent() && studentOpt.get().getPerson() != null) {
+                map.put("studentNum", studentOpt.get().getPerson().getNum());
+            }
+        }
+
         // 展开扩展字段，保持前端兼容现有扁平化取值方式。
+        // 注意：不能覆盖主状态字段 status、approvalOpinion 等
         if (development.getExtraInfo() != null) {
-            map.putAll(development.getExtraInfo());
+            for (Map.Entry<String, Object> entry : development.getExtraInfo().entrySet()) {
+                String key = entry.getKey();
+                // 跳过会覆盖主状态的字段
+                if (!"status".equals(key) && !"approvalOpinion".equals(key) && !"studentId".equals(key) 
+                    && !"studentName".equals(key) && !"title".equals(key) && !"description".equals(key)
+                    && !"developmentType".equals(key) && !"id".equals(key)) {
+                    map.put(key, entry.getValue());
+                }
+            }
         }
 
         return map;

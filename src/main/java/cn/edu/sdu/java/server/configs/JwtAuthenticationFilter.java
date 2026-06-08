@@ -1,5 +1,7 @@
 package cn.edu.sdu.java.server.configs;
 
+import cn.edu.sdu.java.server.models.RequestLog;
+import cn.edu.sdu.java.server.repositorys.RequestLogRepository;
 import cn.edu.sdu.java.server.services.JwtService;
 import cn.edu.sdu.java.server.services.UserDetailsServiceImpl;
 import cn.edu.sdu.java.server.util.DateTimeTool;
@@ -29,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsServiceImpl userDetailsService;
+    private final RequestLogRepository requestLogRepository;
 
     @Autowired
     private RequestAttributeSecurityContextRepository repo;
@@ -36,11 +39,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public JwtAuthenticationFilter(
         JwtService jwtService,
         UserDetailsServiceImpl userDetailsService,
-        HandlerExceptionResolver handlerExceptionResolver
+        HandlerExceptionResolver handlerExceptionResolver,
+        RequestLogRepository requestLogRepository
     ) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
         this.handlerExceptionResolver = handlerExceptionResolver;
+        this.requestLogRepository = requestLogRepository;
     }
 
     @Override
@@ -85,9 +90,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             repo.saveContext(context, request, response);
             filterChain.doFilter(request, response);
             Date endDate = new Date();
-            double requestTime = (int) (endDate.getTime() - startDate.getTime())/1000.;
+            double requestTime = (endDate.getTime() - startDate.getTime()) / 1000.0;
             String startTime = DateTimeTool.parseDateTime(startDate);
-            logger.info(url + "," +username+"," + startTime+ "," + requestTime);
+            logger.info(url + "," + username + "," + startTime + "," + requestTime);
+
+            // 将请求日志写入数据库，供系统监控和数据看板使用
+            try {
+                RequestLog log = new RequestLog();
+                String logUrl = url.length() > 100 ? url.substring(0, 100) : url;
+                String logUsername = (username != null && username.length() > 20)
+                        ? username.substring(0, 20) : username;
+                log.setUrl(logUrl);
+                log.setUsername(logUsername);
+                log.setStartTime(startTime);
+                log.setRequestTime(requestTime);
+                requestLogRepository.save(log);
+            } catch (Exception logEx) {
+                logger.warn("Failed to save request log: " + logEx.getMessage());
+            }
         } catch (Exception exception) {
             exception.printStackTrace();
             handlerExceptionResolver.resolveException(request, response, null, exception);

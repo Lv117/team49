@@ -7,7 +7,6 @@ package cn.edu.sdu.java.server.models;
  * String num 课程编号
  * String name 课程名称
  * Integer credit 学分
- * Course preCourse 前序课程 pre_course_id 关联前序课程的主键 course_id
  */
 
 import jakarta.persistence.*;
@@ -32,9 +31,6 @@ public class Course  {
     @Size(max = 50)
     private String name;
     private Double credit;
-    @ManyToOne
-    @JoinColumn(name="pre_course_id")
-    private Course preCourse;
     @Size(max = 12)
     private String coursePath;
 

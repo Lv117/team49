@@ -32,15 +32,4 @@ public class AuthController {
         return authService.getValidateCode(dataRequest);
     }
 
-    @Operation(summary = "Verify captcha")
-    @PostMapping("/testValidateInfo")
-    public DataResponse testValidateInfo(@Valid @RequestBody DataRequest dataRequest) {
-        return authService.testValidateInfo(dataRequest);
-    }
-
-    @Operation(summary = "Register user")
-    @PostMapping("/registerUser")
-    public DataResponse registerUser(@Valid @RequestBody DataRequest dataRequest) {
-        return authService.registerUser(dataRequest);
-    }
 }
